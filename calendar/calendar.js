@@ -2,7 +2,7 @@
 
 // Pre-generated day order so everyone sees the same randomized layout.
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
-const ENCRYPTED_IMAGE_URL = "encrypted-image.json";
+const ENCRYPTED_DIR = "images";
 
 // Cached DOM lookups
 const grid = document.getElementById("grid");
@@ -15,8 +15,9 @@ const closeModal = document.getElementById("closeModal");
 const unlockHint = document.getElementById("unlockHint");
 
 const encoder = new TextEncoder();
-let encryptedPayloadPromise;
+const payloadCache = new Map();
 let activeObjectUrl = null;
+let currentDay = null;
 
 // Render a button for each calendar day so the HTML stays minimal.
 function renderDoors() {
@@ -45,6 +46,7 @@ const LOCKED_PLACEHOLDER =
   );
 
 function openDay(day) {
+  currentDay = day;
   modalTitle.textContent = `${day}.12.`;
   resetModalState();
   modal.showModal();
@@ -69,27 +71,29 @@ function base64ToArrayBuffer(str) {
   return bytes.buffer;
 }
 
-function loadEncryptedPayload() {
-  if (!encryptedPayloadPromise) {
-    encryptedPayloadPromise = fetch(ENCRYPTED_IMAGE_URL).then((response) => {
+function loadEncryptedPayload(day) {
+  if (!payloadCache.has(day)) {
+    const url = `${ENCRYPTED_DIR}/${day}.json`;
+    const request = fetch(url).then((response) => {
       if (!response.ok) {
-        throw new Error("Nepodařilo se načíst šifrovaný soubor.");
+        throw new Error(`Nepodařilo se načíst šifrovaný soubor: ${url}`);
       }
       return response.json();
     });
+    payloadCache.set(day, request);
   }
-  return encryptedPayloadPromise;
+  return payloadCache.get(day);
 }
 
-async function decryptImage(password) {
+async function decryptImage(password, day) {
   if (!window.crypto?.subtle) {
     throw new Error("Prohlížeč nepodporuje Web Crypto API.");
   }
   if (!password) {
-    throw new Error("Chybí heslo");
+    throw new Error("Chybí heslo.");
   }
 
-  const payload = await loadEncryptedPayload();
+  const payload = await loadEncryptedPayload(day);
   const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey(
     {
@@ -113,16 +117,21 @@ async function decryptImage(password) {
     base64ToArrayBuffer(payload.data),
   );
 
-  const blob = new Blob([decrypted], { type: "image/png" });
+  const contentType = payload.contentType || "image/png";
+  const blob = new Blob([decrypted], { type: contentType });
   return URL.createObjectURL(blob);
 }
 
 async function handleUnlock(event) {
   event.preventDefault();
+  if (currentDay == null) {
+    return;
+  }
+
   submitNote.disabled = true;
 
   try {
-    const url = await decryptImage(dayInput.value.trim());
+    const url = await decryptImage(dayInput.value.trim(), currentDay);
     unlockHint.style.display = "none";
     if (activeObjectUrl) {
       URL.revokeObjectURL(activeObjectUrl);

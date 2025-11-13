@@ -15,3 +15,7 @@
 # Generated files
 *.cache/
 .cache/
+
+# Test files
+
+./calendar/private/*
