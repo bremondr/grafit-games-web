@@ -13,6 +13,7 @@ const dayInput = document.getElementById("dayInput");
 const submitNote = document.getElementById("submitNote");
 const closeModal = document.getElementById("closeModal");
 const unlockHint = document.getElementById("unlockHint");
+const playGameLink = document.getElementById("playGameLink");
 
 const encoder = new TextEncoder();
 const payloadCache = new Map();
@@ -48,6 +49,7 @@ const LOCKED_PLACEHOLDER =
 function openDay(day) {
   currentDay = day;
   modalTitle.textContent = `${day}.12.`;
+  playGameLink.href = `games/${day}/index.html`;
   resetModalState();
   modal.showModal();
 }
