@@ -2,6 +2,7 @@
 
 // Pre-generated day order so everyone sees the same randomized layout.
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
+const ENCRYPTED_IMAGE_URL = "encrypted-image.json";
 
 // Cached DOM lookups
 const grid = document.getElementById("grid");
@@ -12,6 +13,10 @@ const dayInput = document.getElementById("dayInput");
 const submitNote = document.getElementById("submitNote");
 const closeModal = document.getElementById("closeModal");
 const unlockHint = document.getElementById("unlockHint");
+
+const encoder = new TextEncoder();
+let encryptedPayloadPromise;
+let activeObjectUrl = null;
 
 // Render a button for each calendar day so the HTML stays minimal.
 function renderDoors() {
@@ -41,28 +46,107 @@ const LOCKED_PLACEHOLDER =
 
 function openDay(day) {
   modalTitle.textContent = `${day}.12.`;
-  dayImage.src = LOCKED_PLACEHOLDER;
-  dayInput.value = "";
-  unlockHint.style.display = "none";
+  resetModalState();
   modal.showModal();
 }
 
-function unlockImage() {
-  const code = dayInput.value.trim();
-  if (code === "heslo1234") {
-    // Successful unlock reveals the actual PNG asset.
-    dayImage.src = "../assets/graphic_text_min.png";
+function resetModalState() {
+  if (activeObjectUrl) {
+    URL.revokeObjectURL(activeObjectUrl);
+    activeObjectUrl = null;
+  }
+  dayImage.src = LOCKED_PLACEHOLDER;
+  dayInput.value = "";
+  unlockHint.style.display = "none";
+}
+
+function base64ToArrayBuffer(str) {
+  const binary = atob(str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function loadEncryptedPayload() {
+  if (!encryptedPayloadPromise) {
+    encryptedPayloadPromise = fetch(ENCRYPTED_IMAGE_URL).then((response) => {
+      if (!response.ok) {
+        throw new Error("Nepodařilo se načíst šifrovaný soubor.");
+      }
+      return response.json();
+    });
+  }
+  return encryptedPayloadPromise;
+}
+
+async function decryptImage(password) {
+  if (!window.crypto?.subtle) {
+    throw new Error("Prohlížeč nepodporuje Web Crypto API.");
+  }
+  if (!password) {
+    throw new Error("Chybí heslo");
+  }
+
+  const payload = await loadEncryptedPayload();
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: base64ToArrayBuffer(payload.salt),
+      iterations: payload.iterations,
+      hash: "SHA-1",
+    },
+    keyMaterial,
+    { name: "AES-CBC", length: 256 },
+    false,
+    ["decrypt"],
+  );
+
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: "AES-CBC",
+      iv: base64ToArrayBuffer(payload.iv),
+    },
+    key,
+    base64ToArrayBuffer(payload.data),
+  );
+
+  const blob = new Blob([decrypted], { type: "image/png" });
+  return URL.createObjectURL(blob);
+}
+
+async function handleUnlock(event) {
+  event.preventDefault();
+  submitNote.disabled = true;
+
+  try {
+    const url = await decryptImage(dayInput.value.trim());
     unlockHint.style.display = "none";
-  } else {
-    // Show helper text and keep the modal open for another try.
+    if (activeObjectUrl) {
+      URL.revokeObjectURL(activeObjectUrl);
+    }
+    activeObjectUrl = url;
+    dayImage.src = url;
+  } catch (error) {
+    console.error("Decrypt failed", error);
     unlockHint.style.display = "inline";
     dayInput.focus();
+  } finally {
+    submitNote.disabled = false;
   }
 }
 
 function registerEvents() {
-  submitNote.addEventListener("click", unlockImage);
+  submitNote.addEventListener("click", handleUnlock);
+  dayInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      handleUnlock(event);
+    }
+  });
   closeModal.addEventListener("click", () => modal.close());
+  modal.addEventListener("close", resetModalState);
 }
 
 // Adds a handful of snowflakes for lightweight ambient motion.
