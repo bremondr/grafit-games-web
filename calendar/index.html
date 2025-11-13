@@ -5,89 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vánoční kalendář – 24 okének</title>
   <meta name="description" content="Jednoduchý vánoční kalendář s 24 okénky v pevně náhodném pořadí. HTML + JS only." />
-  <style>
-    :root{
-      --bg: #0b1220;
-      --text: #eaf2ff;
-      --muted: #9fb3d1;
-      --gold: #f7c948;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji', 'Segoe UI Symbol';
-      color:var(--text);
-      background:
-        radial-gradient(1200px 600px at 10% -10%, #1a2747 0%, rgba(26,39,71,0) 60%),
-        radial-gradient(900px 500px at 110% -20%, #16213e 0%, rgba(22,33,62,0) 60%),
-        var(--bg);
-      min-height:100%;
-    }
-    header{ padding: clamp(24px, 4vw, 48px) 20px 8px; text-align:center; }
-    h1{ margin:0 0 8px; font-size: clamp(28px, 4.5vw, 48px); letter-spacing: .5px; }
-    .subtitle{ color: var(--muted); font-size: clamp(14px, 2vw, 18px); margin-bottom: 16px; }
-
-    .grid{
-      width:min(1100px, 94vw);
-      margin: 8px auto 48px;
-      display:grid;
-      grid-template-columns: repeat( auto-fit, minmax(120px, 1fr) );
-      gap: 16px;
-    }
-
-    .door{
-      position:relative;
-      aspect-ratio: 1 / 1;
-      background: linear-gradient(180deg, #172446, #0e1834);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 18px;
-      overflow: hidden;
-      cursor: pointer;
-      transform: translateY(0);
-      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-      display:flex; align-items:center; justify-content:center;
-      font-weight: 800; font-size: 22px; color: var(--gold);
-      text-shadow: 0 1px 0 #7a5c00;
-    }
-    .door:hover{ transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.35); border-color: rgba(255,255,255,0.22); }
-
-    dialog{
-      border:none; border-radius: 16px; padding:0; width:min(560px, 92vw);
-      background: #0f1730; color: var(--text);
-      box-shadow: 0 20px 60px rgba(0,0,0,.5);
-    }
-    dialog::backdrop{ background: rgba(6,10,20,.6) }
-    .modal-head{ padding:18px 20px; border-bottom:1px solid rgba(255,255,255,.1); display:flex; align-items:center; justify-content:space-between; }
-    .modal-body{ padding:18px 20px; display:flex; flex-direction:column; gap:12px }
-    .modal-body img{ width:100%; height:auto; border-radius: 12px; display:block }
-    .input-row{ display:flex; gap:8px }
-    .input-row input{ flex:1; border-radius:12px; padding:10px 12px; border:1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color:var(--text) }
-
-    .btn{
-      background: rgba(255,255,255,0.08);
-      border:1px solid rgba(255,255,255,0.18);
-      color:var(--text); padding:10px 14px; border-radius:12px; cursor:pointer; font-size:14px;
-    }
-    .btn.primary{ background: linear-gradient(180deg, #ffd36e, #f7c948); color:#1a1f2e; border-color: rgba(0,0,0,.12); font-weight:600 }
-
-    footer{ color:var(--muted); text-align:center; padding: 8px 0 24px; font-size:12px }
-
-    /* Snow (pure CSS for a tiny festive vibe) */
-    .snow{pointer-events:none; position:fixed; inset:0; overflow:hidden; z-index:0}
-    .flake{ position:absolute; top:-10px; width:6px; height:6px; border-radius:50%; background: rgba(255,255,255,.8); filter: blur(.4px); animation: fall linear infinite; }
-    @keyframes fall{ to{ transform: translateY(110vh) } }
-  </style>
+  <link rel="stylesheet" href="calendar.css" />
 </head>
 <body>
+  <!-- Lightweight snow overlay; flakes are injected via JS for ambience -->
   <div class="snow" aria-hidden="true" id="snow"></div>
+
   <header>
     <h1>Vánoční kalendář</h1>
     <p class="subtitle">24 okének s daty 1.12. – 24.12. v náhodném pořadí.</p>
   </header>
 
+  <!-- Doors grid remains empty until JS renders the randomized order -->
   <main class="grid" id="grid" aria-live="polite"></main>
 
+  <!-- Modal that shows the selected day and handles the unlock flow -->
   <dialog id="dayModal" aria-labelledby="modalTitle">
     <div class="modal-head">
       <strong id="modalTitle">Datum</strong>
@@ -107,83 +39,6 @@
     <small>Kalendář pro vás připravil Lukáš a Ondra z Grafit.games</small>
   </footer>
 
-  <script>
-    // Pevně náhodné pořadí (vygenerováno jednou)
-    const ORDER = [7,22,1,14,9,18,3,24,6,13,2,17,10,5,20,11,4,16,8,21,12,19,15,23];
-
-    // UI prvky
-    const grid = document.getElementById('grid');
-    const modal = document.getElementById('dayModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const dayImage = document.getElementById('dayImage');
-    const dayInput = document.getElementById('dayInput');
-    const submitNote = document.getElementById('submitNote');
-    const closeModal = document.getElementById('closeModal');
-
-    function render(){
-      grid.innerHTML = '';
-      ORDER.forEach(day => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'door';
-        btn.setAttribute('aria-label', `${day}.12.`);
-        btn.textContent = `${day}.12.`;
-        btn.addEventListener('click', () => openDay(day));
-        grid.appendChild(btn);
-      });
-    }
-
-    // Jednoduchý zamčený náhled (SVG)
-    const LOCKED_PLACEHOLDER = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="338">`+
-      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">`+
-      `<stop offset="0%" stop-color="#0f1730"/><stop offset="100%" stop-color="#172446"/></linearGradient></defs>`+
-      `<rect width="100%" height="100%" fill="url(#g)"/>`+
-      `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#f7c948" font-family="system-ui,Segoe UI,Arial,sans-serif" font-size="20">Zadej kód pro zobrazení</text>`+
-      `</svg>`
-    );
-
-    function openDay(day){
-      modalTitle.textContent = `${day}.12.`;
-      // Start locked
-      dayImage.src = LOCKED_PLACEHOLDER;
-      dayInput.value = '';
-      document.getElementById('unlockHint').style.display = 'none';
-      modal.showModal();
-    }
-
-    submitNote.addEventListener('click', () => {
-      const code = dayInput.value.trim();
-      if(code === 'heslo1234'){
-        // Odemknout: teprve nyní načíst skutečný obrázek
-        dayImage.src = '../assets/graphic_text_min.png';
-        document.getElementById('unlockHint').style.display = 'none';
-      }else{
-        // Chybný kód – krátká vizuální odezva
-        document.getElementById('unlockHint').style.display = 'inline';
-        dayInput.focus();
-      }
-    });
-    closeModal.addEventListener('click', () => modal.close());
-
-    // Jednoduchý sníh
-    function snow(){
-      const holder = document.getElementById('snow');
-      const count = 60;
-      for(let i=0;i<count;i++){
-        const flake = document.createElement('i');
-        flake.className = 'flake';
-        flake.style.left = Math.random()*100 + 'vw';
-        flake.style.animationDuration = (6 + Math.random()*12) + 's';
-        flake.style.opacity = (0.4 + Math.random()*0.6).toFixed(2);
-        flake.style.width = flake.style.height = (2 + Math.random()*4) + 'px';
-        holder.appendChild(flake);
-      }
-    }
-
-    // Init
-    render();
-    snow();
-  </script>
+  <script src="calendar.js" defer></script>
 </body>
 </html>
