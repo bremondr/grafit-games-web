@@ -18,4 +18,5 @@
 
 # Test files
 
-./calendar/private/*
+# Secrets / private assets
+calendar/private/
