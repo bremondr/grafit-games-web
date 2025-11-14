@@ -19,6 +19,8 @@ const replayGameLink = document.getElementById("replayGame");
 
 const encoder = new TextEncoder();
 const payloadCache = new Map();
+const doorPreviewRefs = new Map();
+const doorPreviewCache = new Map();
 let activeObjectUrl = null;
 let currentDay = null;
 let storedPasswords = loadStoredPasswords();
@@ -30,7 +32,9 @@ function renderDoors() {
     btn.type = "button";
     btn.className = "door";
     btn.setAttribute("aria-label", `Den ${day}`);
-    btn.textContent = `${day}`;
+    btn.innerHTML = `<img class="door__preview" alt="" aria-hidden="true"><span>${day}</span>`;
+    const previewImg = btn.querySelector(".door__preview");
+    hydrateDoorPreview(day, previewImg, btn);
     btn.addEventListener("click", () => openDay(day));
     grid.appendChild(btn);
   });
@@ -74,7 +78,7 @@ function loadEncryptedPayload(day) {
     const url = `${ENCRYPTED_DIR}/${day}.json`;
     const request = fetch(url).then((response) => {
       if (!response.ok) {
-        throw new Error(`Nepoda≈ôilo se naƒç√≠st ≈°ifrovan√Ω soubor: ${url}`);
+        throw new Error(`Nepodarilo se nacÌst öifrovan˝ soubor: ${url}`);
       }
       return response.json();
     });
@@ -85,10 +89,10 @@ function loadEncryptedPayload(day) {
 
 async function decryptImage(password, day) {
   if (!window.crypto?.subtle) {
-    throw new Error("Prohl√≠≈æeƒç nepodporuje Web Crypto API.");
+    throw new Error("ProhlÌûec nepodporuje Web Crypto API.");
   }
   if (!password) {
-    throw new Error("Chyb√≠ heslo.");
+    throw new Error("ChybÌ heslo.");
   }
 
   const payload = await loadEncryptedPayload(day);
@@ -116,23 +120,24 @@ async function decryptImage(password, day) {
   );
 
   const contentType = payload.contentType || "image/png";
-  const blob = new Blob([decrypted], { type: contentType });
-  return URL.createObjectURL(blob);
+  return new Blob([decrypted], { type: contentType });
 }
 
 async function showImageForPassword(password, day) {
-  const url = await decryptImage(password, day);
+  const blob = await decryptImage(password, day);
+  const url = URL.createObjectURL(blob);
   unlockHint.style.display = "none";
   if (activeObjectUrl) {
     URL.revokeObjectURL(activeObjectUrl);
   }
   activeObjectUrl = url;
   dayImage.src = url;
-  dayImage.alt = `Obr√°zek pro den ${day}`;
+  dayImage.alt = `Obr·zek pro den ${day}`;
   dayImage.hidden = false;
   dayImage.removeAttribute("aria-hidden");
   gamePanel.hidden = true;
   replayGameLink.hidden = false;
+  setDoorPreview(day, blob);
 }
 
 async function handleUnlock(event) {
@@ -184,6 +189,7 @@ function initSnow() {
 renderDoors();
 registerEvents();
 initSnow();
+bootstrapUnlockedPreviews();
 
 function loadStoredPasswords() {
   try {
@@ -214,6 +220,7 @@ function forgetPassword(day) {
   if (storedPasswords[day]) {
     delete storedPasswords[day];
     persistPasswords();
+    clearDoorPreview(day);
   }
 }
 
@@ -238,4 +245,59 @@ function setGameSource(day) {
   const url = `games/${day}/index.html`;
   gameFrame.src = url;
   replayGameLink.href = url;
+}
+
+function hydrateDoorPreview(day, imgEl, button) {
+  doorPreviewRefs.set(day, { imgEl, button });
+  const cachedUrl = doorPreviewCache.get(day.toString());
+  if (cachedUrl) {
+    imgEl.src = cachedUrl;
+    button.classList.add("has-preview");
+  }
+}
+
+function setDoorPreview(day, blob) {
+  const key = day.toString();
+  const existing = doorPreviewCache.get(key);
+  if (existing) {
+    URL.revokeObjectURL(existing);
+  }
+  const previewUrl = URL.createObjectURL(blob);
+  doorPreviewCache.set(key, previewUrl);
+  const refs = doorPreviewRefs.get(day);
+  if (refs) {
+    refs.imgEl.src = previewUrl;
+    refs.button.classList.add("has-preview");
+  }
+}
+
+function clearDoorPreview(day) {
+  const key = day.toString();
+  const cached = doorPreviewCache.get(key);
+  if (cached) {
+    URL.revokeObjectURL(cached);
+    doorPreviewCache.delete(key);
+  }
+  const refs = doorPreviewRefs.get(day);
+  if (refs) {
+    refs.imgEl.removeAttribute("src");
+    refs.button.classList.remove("has-preview");
+  }
+}
+
+async function bootstrapUnlockedPreviews() {
+  const entries = Object.entries(storedPasswords);
+  for (const [dayStr, password] of entries) {
+    const dayNum = Number(dayStr);
+    if (!password || Number.isNaN(dayNum)) {
+      continue;
+    }
+    try {
+      const blob = await decryptImage(password, dayNum);
+      setDoorPreview(dayNum, blob);
+    } catch (error) {
+      console.warn(`Failed to restore preview for day ${dayNum}`, error);
+      forgetPassword(dayNum);
+    }
+  }
 }
