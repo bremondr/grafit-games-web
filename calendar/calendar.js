@@ -36,17 +36,6 @@ function renderDoors() {
   });
 }
 
-const LOCKED_PLACEHOLDER =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="338">` +
-      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-      `<stop offset="0%" stop-color="#0f1730"/><stop offset="100%" stop-color="#172446"/></linearGradient></defs>` +
-      `<rect width="100%" height="100%" fill="url(#g)"/>` +
-      `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#f7c948" font-family="system-ui,Segoe UI,Arial,sans-serif" font-size="20">Zadej kód pro zobrazení</text>` +
-      `</svg>`,
-  );
-
 function openDay(day) {
   currentDay = day;
   modalTitle.textContent = `Den ${day}`;
@@ -61,8 +50,10 @@ function resetModalState() {
     URL.revokeObjectURL(activeObjectUrl);
     activeObjectUrl = null;
   }
-  dayImage.src = LOCKED_PLACEHOLDER;
+  dayImage.removeAttribute("src");
+  dayImage.alt = "";
   dayImage.hidden = true;
+  dayImage.setAttribute("aria-hidden", "true");
   dayInput.value = "";
   unlockHint.style.display = "none";
   gamePanel.hidden = false;
@@ -137,7 +128,9 @@ async function showImageForPassword(password, day) {
   }
   activeObjectUrl = url;
   dayImage.src = url;
+  dayImage.alt = `Obrázek pro den ${day}`;
   dayImage.hidden = false;
+  dayImage.removeAttribute("aria-hidden");
   gamePanel.hidden = true;
   replayGameLink.hidden = false;
 }
