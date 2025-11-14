@@ -1,0 +1,9 @@
+- pamet vyplneni hesla
+- embed hry do okenka daneho dne
+- nastaveni fixniho pomeru stran hry
+- upravit cisla dni pouze na den bez mesice
+- vizual podle hry
+- okenka udelat jako krabice z té hry
+- vymyslet a vytvořit závěrečnou obrázkovou šifru
+- otevírání okýnek podle datumu
+- Lukášovi hry budou mít repo s balíčky po jednotlivých hrách pro každý den (balíček=složka s názvem číslo dne), repo grafit.games bude mít workflow které každou půlnoc stáhne z lukášova repa balíček patřičného dne a všech předchozích a nahraje ho deploye webu
