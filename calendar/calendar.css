@@ -109,10 +109,17 @@ dialog {
   border: none;
   border-radius: 16px;
   padding: 0;
-  width: 90%;
+  width: min(900px, 90vw);
+  max-height: 80vh;
   background: #0f1730;
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+dialog:not([open]) {
+  display: none;
 }
 
 dialog::backdrop {
@@ -125,6 +132,7 @@ dialog::backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
 }
 
 .modal-body {
@@ -132,12 +140,14 @@ dialog::backdrop {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  flex: 1 1 auto;
 }
 
 .game-panel {
   width: 100%;
   aspect-ratio: 16 / 9;
-  min-height: 720px;
+  min-height: 480px;
   border-radius: 12px;
   overflow: hidden;
   background: #05070f;
