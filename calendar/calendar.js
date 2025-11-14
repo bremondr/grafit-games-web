@@ -27,8 +27,8 @@ function renderDoors() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "door";
-    btn.setAttribute("aria-label", `${day}.12.`);
-    btn.textContent = `${day}.12.`;
+    btn.setAttribute("aria-label", `Den ${day}`);
+    btn.textContent = `${day}`;
     btn.addEventListener("click", () => openDay(day));
     grid.appendChild(btn);
   });
@@ -48,7 +48,7 @@ const LOCKED_PLACEHOLDER =
 
 function openDay(day) {
   currentDay = day;
-  modalTitle.textContent = `${day}.12.`;
+  modalTitle.textContent = `Den ${day}`;
   playGameLink.href = `games/${day}/index.html`;
   resetModalState();
   modal.showModal();
