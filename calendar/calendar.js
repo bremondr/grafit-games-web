@@ -3,6 +3,7 @@
 // Pre-generated day order so everyone sees the same randomized layout.
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
 const ENCRYPTED_DIR = "images";
+const STORAGE_KEY = "calendarUnlocked";
 
 // Cached DOM lookups
 const grid = document.getElementById("grid");
@@ -19,6 +20,7 @@ const encoder = new TextEncoder();
 const payloadCache = new Map();
 let activeObjectUrl = null;
 let currentDay = null;
+let storedPasswords = loadStoredPasswords();
 
 // Render a button for each calendar day so the HTML stays minimal.
 function renderDoors() {
@@ -52,6 +54,7 @@ function openDay(day) {
   playGameLink.href = `games/${day}/index.html`;
   resetModalState();
   modal.showModal();
+  autoUnlockIfStored(day);
 }
 
 function resetModalState() {
@@ -124,6 +127,16 @@ async function decryptImage(password, day) {
   return URL.createObjectURL(blob);
 }
 
+async function showImageForPassword(password, day) {
+  const url = await decryptImage(password, day);
+  unlockHint.style.display = "none";
+  if (activeObjectUrl) {
+    URL.revokeObjectURL(activeObjectUrl);
+  }
+  activeObjectUrl = url;
+  dayImage.src = url;
+}
+
 async function handleUnlock(event) {
   event.preventDefault();
   if (currentDay == null) {
@@ -131,15 +144,11 @@ async function handleUnlock(event) {
   }
 
   submitNote.disabled = true;
+  const password = dayInput.value.trim();
 
   try {
-    const url = await decryptImage(dayInput.value.trim(), currentDay);
-    unlockHint.style.display = "none";
-    if (activeObjectUrl) {
-      URL.revokeObjectURL(activeObjectUrl);
-    }
-    activeObjectUrl = url;
-    dayImage.src = url;
+    await showImageForPassword(password, currentDay);
+    rememberPassword(currentDay, password);
   } catch (error) {
     console.error("Decrypt failed", error);
     unlockHint.style.display = "inline";
@@ -178,3 +187,54 @@ function initSnow() {
 renderDoors();
 registerEvents();
 initSnow();
+
+// --- Local storage helpers -------------------------------------------------
+
+function loadStoredPasswords() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistPasswords() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedPasswords));
+  } catch {
+    // Ignore storage failures (e.g., disabled cookies)
+  }
+}
+
+function rememberPassword(day, password) {
+  if (!password) {
+    return;
+  }
+  storedPasswords[day] = password;
+  persistPasswords();
+}
+
+function forgetPassword(day) {
+  if (storedPasswords[day]) {
+    delete storedPasswords[day];
+    persistPasswords();
+  }
+}
+
+async function autoUnlockIfStored(day) {
+  const cached = storedPasswords[day];
+  if (!cached) {
+    return;
+  }
+  submitNote.disabled = true;
+  try {
+    dayInput.value = cached;
+    await showImageForPassword(cached, day);
+  } catch (error) {
+    console.warn("Cached password invalid, clearing entry.", error);
+    forgetPassword(day);
+  } finally {
+    submitNote.disabled = false;
+  }
+}
