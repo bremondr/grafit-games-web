@@ -1,6 +1,5 @@
 // Handles rendering and interactivity for the advent calendar experience.
 
-// Pre-generated day order so everyone sees the same randomized layout.
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
 const ENCRYPTED_DIR = "images";
 const STORAGE_KEY = "calendarUnlocked";
@@ -14,7 +13,9 @@ const dayInput = document.getElementById("dayInput");
 const submitNote = document.getElementById("submitNote");
 const closeModal = document.getElementById("closeModal");
 const unlockHint = document.getElementById("unlockHint");
-const playGameLink = document.getElementById("playGameLink");
+const gamePanel = document.getElementById("gamePanel");
+const gameFrame = document.getElementById("gameFrame");
+const replayGameLink = document.getElementById("replayGame");
 
 const encoder = new TextEncoder();
 const payloadCache = new Map();
@@ -22,7 +23,6 @@ let activeObjectUrl = null;
 let currentDay = null;
 let storedPasswords = loadStoredPasswords();
 
-// Render a button for each calendar day so the HTML stays minimal.
 function renderDoors() {
   grid.innerHTML = "";
   ORDER.forEach((day) => {
@@ -36,7 +36,6 @@ function renderDoors() {
   });
 }
 
-// Inline SVG used as a "locked" preview until the user enters the password.
 const LOCKED_PLACEHOLDER =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
@@ -51,7 +50,7 @@ const LOCKED_PLACEHOLDER =
 function openDay(day) {
   currentDay = day;
   modalTitle.textContent = `Den ${day}`;
-  playGameLink.href = `games/${day}/index.html`;
+  setGameSource(day);
   resetModalState();
   modal.showModal();
   autoUnlockIfStored(day);
@@ -63,8 +62,11 @@ function resetModalState() {
     activeObjectUrl = null;
   }
   dayImage.src = LOCKED_PLACEHOLDER;
+  dayImage.hidden = true;
   dayInput.value = "";
   unlockHint.style.display = "none";
+  gamePanel.hidden = false;
+  replayGameLink.hidden = true;
 }
 
 function base64ToArrayBuffer(str) {
@@ -135,6 +137,9 @@ async function showImageForPassword(password, day) {
   }
   activeObjectUrl = url;
   dayImage.src = url;
+  dayImage.hidden = false;
+  gamePanel.hidden = true;
+  replayGameLink.hidden = false;
 }
 
 async function handleUnlock(event) {
@@ -169,7 +174,6 @@ function registerEvents() {
   modal.addEventListener("close", resetModalState);
 }
 
-// Adds a handful of snowflakes for lightweight ambient motion.
 function initSnow() {
   const holder = document.getElementById("snow");
   const count = 60;
@@ -187,8 +191,6 @@ function initSnow() {
 renderDoors();
 registerEvents();
 initSnow();
-
-// --- Local storage helpers -------------------------------------------------
 
 function loadStoredPasswords() {
   try {
@@ -237,4 +239,10 @@ async function autoUnlockIfStored(day) {
   } finally {
     submitNote.disabled = false;
   }
+}
+
+function setGameSource(day) {
+  const url = `games/${day}/index.html`;
+  gameFrame.src = url;
+  replayGameLink.href = url;
 }

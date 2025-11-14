@@ -26,13 +26,16 @@
       <button class="btn" id="closeModal" aria-label="Zavřít">✕</button>
     </div>
     <div class="modal-body">
-      <img id="dayImage" alt="Obrázek okénka" />
+      <div class="game-panel" id="gamePanel">
+        <iframe id="gameFrame" title="Mini hra" loading="lazy" allowfullscreen></iframe>
+      </div>
+      <img id="dayImage" alt="Obrázek okénka" hidden />
       <div class="input-row">
         <input id="dayInput" type="password" placeholder="Zadej kód pro odemčení obrázku" />
         <button class="btn primary" id="submitNote">Odemknout</button>
       </div>
       <small id="unlockHint" style="color:#ff7961;display:none">Nesprávný kód. Zkus to znovu.</small>
-      <a id="playGameLink" class="btn" target="_blank" rel="noopener">Spustit hru</a>
+      <a id="replayGame" class="btn" href="#" target="_blank" rel="noopener" hidden>Spustit hru znovu</a>
     </div>
   </dialog>
 
