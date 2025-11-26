@@ -1,9 +1,13 @@
 :root {
-  /* Shared color palette for winter/night feel */
-  --bg: #0b1220;
-  --text: #eaf2ff;
-  --muted: #9fb3d1;
-  --gold: #f7c948;
+  /* Winter/Christmas palette */
+  --bg: #0f1b2b;
+  --bg-accent: #1f3b5b;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --ice: #99c2ff;
+  --pine: #1f6f3d;
+  --berry: #b22222;
+  --gold: #d4af37;
 }
 
 * {
@@ -22,9 +26,10 @@ body {
     "Segoe UI Symbol";
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 10% -10%, #1a2747 0%, rgba(26, 39, 71, 0) 60%),
-    radial-gradient(900px 500px at 110% -20%, #16213e 0%, rgba(22, 33, 62, 0) 60%),
-    var(--bg);
+    radial-gradient(1200px 600px at 10% -10%, rgba(153, 194, 255, 0.28) 0%, rgba(26, 39, 71, 0) 60%),
+    radial-gradient(900px 500px at 110% -20%, rgba(210, 175, 55, 0.18) 0%, rgba(22, 33, 62, 0) 60%),
+    radial-gradient(800px 500px at 50% 110%, rgba(31, 111, 61, 0.18) 0%, rgba(12, 21, 35, 0) 55%),
+    linear-gradient(180deg, #0d1625 0%, #0b1220 40%, #09101c 100%);
   min-height: 100%;
 }
 
@@ -57,7 +62,7 @@ h1 {
 .door {
   position: relative;
   aspect-ratio: 1 / 1;
-  background: linear-gradient(180deg, #172446, #0e1834);
+  background: linear-gradient(180deg, #1f3b5b, #13243c);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
   overflow: hidden;
@@ -101,7 +106,7 @@ h1 {
 .door:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(153, 194, 255, 0.35);
 }
 
 
@@ -128,7 +133,7 @@ dialog::backdrop {
 
 .modal-head {
   padding: 18px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(153, 194, 255, 0.18);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -154,7 +159,7 @@ dialog::backdrop {
   border-radius: 12px;
   overflow: hidden;
   background: #05070f;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(153, 194, 255, 0.18);
 }
 
 .game-panel canvas {
@@ -256,9 +261,9 @@ dialog::backdrop {
 }
 
 .btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: var(--text);
+  background: rgba(153, 194, 255, 0.14);
+  border: 1px solid rgba(153, 194, 255, 0.28);
+  color: var(--snow-white);
   padding: 10px 14px;
   border-radius: 12px;
   cursor: pointer;
@@ -266,8 +271,8 @@ dialog::backdrop {
 }
 
 .btn.primary {
-  background: linear-gradient(180deg, #ffd36e, #f7c948);
-  color: #1a1f2e;
+  background: #d4af37;
+  color: #0b1220;
   border-color: rgba(0, 0, 0, 0.12);
   font-weight: 600;
 }
