@@ -109,8 +109,8 @@ dialog {
   border: none;
   border-radius: 16px;
   padding: 0;
-  width: min(900px, 90vw);
-  max-height: 80vh;
+  width: min(1280px, 96vw);
+  max-height: 94vh;
   background: #0f1730;
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -142,12 +142,15 @@ dialog::backdrop {
   gap: 12px;
   overflow-y: auto;
   flex: 1 1 auto;
+  align-items: center;
 }
 
 .game-panel {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  min-height: 480px;
+  width: min(1200px, 96vw);
+  aspect-ratio: 8 / 5;
+  min-width: min(960px, 96vw);
+  min-height: min(600px, 72vh);
+  max-height: 75vh;
   border-radius: 12px;
   overflow: hidden;
   background: #05070f;
