@@ -173,6 +173,16 @@ function registerEvents() {
       handleUnlock(event);
     }
   });
+  ["keydown", "keypress", "keyup"].forEach((type) => {
+    dayInput.addEventListener(
+      type,
+      (event) => {
+        // Stop Unity's global listeners from stealing keyboard events while typing.
+        event.stopPropagation();
+      },
+      true,
+    );
+  });
   closeModal.addEventListener("click", () => modal.close());
   modal.addEventListener("close", () => {
     resetModalState();
