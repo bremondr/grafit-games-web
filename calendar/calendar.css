@@ -157,12 +157,77 @@ dialog::backdrop {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.game-panel canvas {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+}
 .game-panel iframe {
   width: 100%;
   height: 100%;
   border: 0;
   display: block;
   background: #000;
+}
+
+.unity-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #05070f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unity-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  min-width: 200px;
+}
+
+#unity-progress-bar-empty {
+  width: 220px;
+  height: 16px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+#unity-progress-bar-full {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(180deg, #ffd36e, #f7c948);
+  transition: width 0.2s ease;
+}
+
+.unity-warning {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  padding: 8px 10px;
+  display: none;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #f7f8ff;
+}
+
+.unity-warning.error {
+  border-color: #ff8a80;
+  color: #ffe0e0;
+}
+
+.unity-warning.warning {
+  border-color: #ffd36e;
+  color: #fff3d1;
 }
 
 .modal-body img {

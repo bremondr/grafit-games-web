@@ -14,7 +14,6 @@ const submitNote = document.getElementById("submitNote");
 const closeModal = document.getElementById("closeModal");
 const unlockHint = document.getElementById("unlockHint");
 const gamePanel = document.getElementById("gamePanel");
-const gameFrame = document.getElementById("gameFrame");
 const replayGameLink = document.getElementById("replayGame");
 
 const encoder = new TextEncoder();
@@ -24,6 +23,9 @@ const doorPreviewCache = new Map();
 let activeObjectUrl = null;
 let currentDay = null;
 let storedPasswords = loadStoredPasswords();
+let unityInstance = null;
+let unityLoaderScript = null;
+let unityMountedDay = null;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -43,13 +45,16 @@ function renderDoors() {
 function openDay(day) {
   currentDay = day;
   modalTitle.textContent = `Den ${day}`;
-  setGameSource(day);
   resetModalState();
+  setGameSource(day);
   modal.showModal();
   autoUnlockIfStored(day);
 }
 
 function resetModalState() {
+  if (!modal.open) {
+    teardownUnity();
+  }
   if (activeObjectUrl) {
     URL.revokeObjectURL(activeObjectUrl);
     activeObjectUrl = null;
@@ -78,7 +83,7 @@ function loadEncryptedPayload(day) {
     const url = `${ENCRYPTED_DIR}/${day}.json`;
     const request = fetch(url).then((response) => {
       if (!response.ok) {
-        throw new Error(`Nepodarilo se nacíst šifrovaný soubor: ${url}`);
+        throw new Error(`Nepodarilo se nacist sifrovany soubor: ${url}`);
       }
       return response.json();
     });
@@ -89,10 +94,10 @@ function loadEncryptedPayload(day) {
 
 async function decryptImage(password, day) {
   if (!window.crypto?.subtle) {
-    throw new Error("Prohlížec nepodporuje Web Crypto API.");
+    throw new Error("Prohlizec nepodporuje Web Crypto API.");
   }
   if (!password) {
-    throw new Error("Chybí heslo.");
+    throw new Error("Chybi heslo.");
   }
 
   const payload = await loadEncryptedPayload(day);
@@ -132,7 +137,7 @@ async function showImageForPassword(password, day) {
   }
   activeObjectUrl = url;
   dayImage.src = url;
-  dayImage.alt = `Obrázek pro den ${day}`;
+  dayImage.alt = `Obrazek pro den ${day}`;
   dayImage.hidden = false;
   dayImage.removeAttribute("aria-hidden");
   gamePanel.hidden = true;
@@ -169,7 +174,10 @@ function registerEvents() {
     }
   });
   closeModal.addEventListener("click", () => modal.close());
-  modal.addEventListener("close", resetModalState);
+  modal.addEventListener("close", () => {
+    resetModalState();
+    teardownUnity();
+  });
 }
 
 function initSnow() {
@@ -243,8 +251,98 @@ async function autoUnlockIfStored(day) {
 
 function setGameSource(day) {
   const url = `games/${day}/index.html`;
-  gameFrame.src = url;
   replayGameLink.href = url;
+  mountUnityGame(day);
+}
+
+function mountUnityGame(day) {
+  teardownUnity();
+  unityMountedDay = day;
+  gamePanel.innerHTML = `
+    <div class="unity-shell">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+      <div id="unity-loading-bar" class="unity-loading">
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning" class="unity-warning"></div>
+    </div>
+  `;
+
+  const canvas = gamePanel.querySelector("#unity-canvas");
+  const loadingBar = gamePanel.querySelector("#unity-loading-bar");
+  const progressBarFull = gamePanel.querySelector("#unity-progress-bar-full");
+  const warningBanner = gamePanel.querySelector("#unity-warning");
+
+  const unityShowBanner = (msg, type) => {
+    warningBanner.textContent = msg || "";
+    warningBanner.classList.toggle("error", type === "error");
+    warningBanner.classList.toggle("warning", type === "warning");
+    warningBanner.style.display = msg ? "block" : "none";
+    if (msg && type !== "error") {
+      setTimeout(() => {
+        warningBanner.textContent = "";
+        warningBanner.style.display = "none";
+      }, 5000);
+    }
+  };
+
+  const baseUrl = `games/${day}`;
+  const buildUrl = `${baseUrl}/Build`;
+  const loaderUrl = `${buildUrl}/Testie.loader.js`;
+  const config = {
+    arguments: [],
+    dataUrl: `${buildUrl}/Testie.data.unityweb`,
+    frameworkUrl: `${buildUrl}/Testie.framework.js.unityweb`,
+    codeUrl: `${buildUrl}/Testie.wasm.unityweb`,
+    streamingAssetsUrl: `${baseUrl}/StreamingAssets`,
+    companyName: "DefaultCompany",
+    productName: "Project Radiance",
+    productVersion: "1.0",
+    showBanner: unityShowBanner,
+    matchWebGLToCanvasSize: true,
+  };
+
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  loadingBar.style.display = "block";
+
+  const script = document.createElement("script");
+  unityLoaderScript = script;
+  script.src = loaderUrl;
+  script.onload = () => {
+    createUnityInstance(canvas, config, (progress) => {
+      progressBarFull.style.width = 100 * progress + "%";
+    })
+      .then((instance) => {
+        unityInstance = instance;
+        loadingBar.style.display = "none";
+      })
+      .catch((message) => {
+        alert(message);
+      });
+  };
+  script.onerror = () => {
+    unityShowBanner("Nepodarilo se nacist hru.", "error");
+    loadingBar.style.display = "none";
+  };
+  document.body.appendChild(script);
+}
+
+function teardownUnity() {
+  unityMountedDay = null;
+  if (unityInstance?.Quit) {
+    unityInstance.Quit().catch(() => {});
+  }
+  unityInstance = null;
+  if (unityLoaderScript?.parentNode) {
+    unityLoaderScript.parentNode.removeChild(unityLoaderScript);
+  }
+  unityLoaderScript = null;
+  gamePanel.innerHTML = "";
 }
 
 function hydrateDoorPreview(day, imgEl, button) {
