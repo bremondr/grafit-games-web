@@ -4,8 +4,8 @@
 # designated output folder so the frontend can fetch images per day.
 
 param(
-    [string]$ImageFolder = "..\assets\calendar-images",
-    [string]$PasswordsCsv = ".\passwords.csv",
+    [string]$ImageFolder = ".\private\obrazky",
+    [string]$PasswordsCsv = ".\private\secret.csv",
     [string]$OutputFolder = ".\images",
     [int]$Iterations = 100000
 )
