@@ -298,14 +298,15 @@ function mountUnityGame(day) {
     }
   };
 
+  const buildName = `Day_${day}`;
   const baseUrl = `games/${day}`;
   const buildUrl = `${baseUrl}/Build`;
-  const loaderUrl = `${buildUrl}/Testie.loader.js`;
+  const loaderUrl = `${buildUrl}/${buildName}.loader.js`;
   const config = {
     arguments: [],
-    dataUrl: `${buildUrl}/Testie.data.unityweb`,
-    frameworkUrl: `${buildUrl}/Testie.framework.js.unityweb`,
-    codeUrl: `${buildUrl}/Testie.wasm.unityweb`,
+    dataUrl: `${buildUrl}/${buildName}.data.unityweb`,
+    frameworkUrl: `${buildUrl}/${buildName}.framework.js.unityweb`,
+    codeUrl: `${buildUrl}/${buildName}.wasm.unityweb`,
     streamingAssetsUrl: `${baseUrl}/StreamingAssets`,
     companyName: "DefaultCompany",
     productName: "Project Radiance",
