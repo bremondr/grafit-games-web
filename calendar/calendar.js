@@ -180,15 +180,13 @@ async function handleUnlock(event) {
 
 function registerEvents() {
   submitNote.addEventListener("click", handleUnlock);
-  dayInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      handleUnlock(event);
-    }
-  });
   ["keydown", "keypress", "keyup"].forEach((type) => {
     dayInput.addEventListener(
       type,
       (event) => {
+        if (type === "keydown" && event.key === "Enter") {
+          handleUnlock(event);
+        }
         // Stop Unity's global listeners from stealing keyboard events while typing.
         event.stopPropagation();
       },
