@@ -1,7 +1,7 @@
 // Handles rendering and interactivity for the advent calendar experience.
 
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
-const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
+const ENFORCE_SERVER_DATE_LIMIT = false; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
 const STORAGE_KEY = "calendarUnlocked";
 const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";

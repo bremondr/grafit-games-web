@@ -295,6 +295,17 @@ footer {
   margin-top: auto;
 }
 
+.footer-link {
+  color: var(--gold);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.footer-link:hover {
+  color: #ffe89c;
+  text-decoration: underline;
+}
+
 /* Snow (pure CSS for a tiny festive vibe) */
 .snow {
   pointer-events: none;
