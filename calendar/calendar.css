@@ -322,12 +322,11 @@ footer {
 
 .footer-text {
   position: absolute;
-  left: 0;
+  left: 32px;
   bottom: 44px;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 14px;
   color: var(--muted);
-  transform: translateX(32px);
   transition: color 0.2s ease;
   z-index: 1;
 }

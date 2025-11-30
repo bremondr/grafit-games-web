@@ -528,13 +528,13 @@ function initFooterRobotEasterEgg() {
   footerAnimationFrame = requestAnimationFrame(stepFooterRobot);
 }
 
- function createFooterRobotState() {
+function createFooterRobotState() {
   const margin = 0;
   const trackWidth = getFooterTrackWidth();
   const robotWidth = footerRobot.offsetWidth || 36;
   const robotHeight = footerRobot.offsetHeight || 36;
   const textWidth = footerText.offsetWidth || 150;
-  const usableWidth = Math.max(trackWidth - margin * 2, robotWidth + 20);
+  const usableWidth = trackWidth;
   const textStart = clampValue((usableWidth - textWidth) / 2, 0, Math.max(usableWidth - textWidth, 0));
   const startOnLeft = Math.random() < 0.5;
   const startX = startOnLeft ? 0 : Math.max(usableWidth - robotWidth, 0);
@@ -605,6 +605,7 @@ function updateFooterRobotPhysics() {
   const MAX_SPEED = 3.4;
   const GRAVITY = -0.3;
   const JUMP_FORCE = 7;
+  const TEXT_PLATFORM_MARGIN = 6;
 
   if (controls.left) {
     state.robotVX = Math.max(state.robotVX - ACCEL, -MAX_SPEED);
@@ -627,13 +628,22 @@ function updateFooterRobotPhysics() {
     state.robotVY += GRAVITY;
   }
   state.robotY += state.robotVY;
-  if (state.robotY <= 0) {
+  let groundedNow = false;
+  const platform = getFooterPlatformCollision(state, TEXT_PLATFORM_MARGIN);
+  if (platform?.landed) {
+    state.robotY = platform.height;
+    if (state.robotVY < 0) {
+      state.robotVY = 0;
+    }
+    groundedNow = true;
+  } else if (state.robotY <= 0) {
     state.robotY = 0;
     if (state.robotVY < 0) {
       state.robotVY = 0;
     }
-    state.grounded = true;
+    groundedNow = true;
   }
+  state.grounded = groundedNow;
 
   state.robotX += state.robotVX;
   const maxRobotX = Math.max(state.usableWidth - state.robotWidth, 0);
@@ -647,7 +657,7 @@ function updateFooterRobotPhysics() {
 
   state.textWidth = footerText.offsetWidth || state.textWidth;
   state.textVX *= 0.9;
-  handleFooterTextCollision(state, controls);
+  handleFooterTextCollision(state, controls, platform);
   state.textX += state.textVX;
   const maxTextX = Math.max(state.usableWidth - state.textWidth, 0);
   if (state.textX < 0) {
@@ -659,13 +669,14 @@ function updateFooterRobotPhysics() {
   }
 }
 
-function handleFooterTextCollision(state, controls) {
+function handleFooterTextCollision(state, controls, platform = null) {
   const textMin = state.textX;
   const textMax = state.textX + state.textWidth;
   const robotMin = state.robotX;
   const robotMax = state.robotX + state.robotWidth;
   const verticalOverlap = state.robotY < state.robotHeight * 0.6;
-  if (!verticalOverlap || robotMax <= textMin || robotMin >= textMax) {
+  const horizontalContact = robotMax > textMin && robotMin < textMax;
+  if (!horizontalContact || (platform?.onTop && platform?.landed)) {
     return;
   }
   const direction = resolveFooterDirection(state, controls);
@@ -702,10 +713,9 @@ function applyFooterRobotTransforms() {
     return;
   }
   const state = footerRobotState;
-  const robotX = state.robotX + state.margin;
-  const textX = state.textX + state.margin;
-  footerRobot.style.transform = `translate3d(${robotX}px, ${-state.robotY}px, 0)`;
-  footerText.style.transform = `translate3d(${textX}px, 0, 0)`;
+  footerRobot.style.left = `${state.robotX}px`;
+  footerRobot.style.transform = `translate3d(0, ${-state.robotY}px, 0)`;
+  footerText.style.left = `${state.textX}px`;
 }
 
 function recalcFooterRobotStage() {
@@ -715,7 +725,7 @@ function recalcFooterRobotStage() {
   const state = footerRobotState;
   const previousUsable = state.usableWidth || 1;
   state.trackWidth = getFooterTrackWidth();
-  state.usableWidth = Math.max(state.trackWidth - state.margin * 2, state.robotWidth + 20);
+  state.usableWidth = state.trackWidth;
   const scale = previousUsable > 0 ? state.usableWidth / previousUsable : 1;
   state.robotWidth = footerRobot.offsetWidth || state.robotWidth;
   state.robotHeight = footerRobot.offsetHeight || state.robotHeight;
@@ -737,7 +747,25 @@ function clampValue(value, min, max) {
 }
 
 function getFooterTrackWidth() {
-  const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
-  const trackWidth = footerTrack?.clientWidth || 0;
-  return Math.max(viewportWidth, trackWidth);
+  return footerTrack?.offsetWidth || Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+}
+
+function getFooterPlatformCollision(state, margin) {
+  const platformHeight = state.robotHeight * 0.45;
+  const textMin = state.textX - margin;
+  const textMax = state.textX + state.textWidth + margin;
+  const robotMin = state.robotX;
+  const robotMax = state.robotX + state.robotWidth;
+  const horizontalOverlap = robotMax > textMin && robotMin < textMax;
+  const descending = state.robotVY <= 0;
+  const nearPlatform = state.robotY <= platformHeight + state.robotHeight * 0.25;
+  const fullyAbove = robotMin >= textMin && robotMax <= textMax;
+  if (!horizontalOverlap || !descending || !nearPlatform || !fullyAbove) {
+    return null;
+  }
+  return {
+    landed: true,
+    onTop: true,
+    height: platformHeight,
+  };
 }
