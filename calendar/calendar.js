@@ -204,7 +204,7 @@ function registerEvents() {
 
 function initSnow() {
   const holder = document.getElementById("snow");
-  const count = 60;
+  const count = 60 * (currentDay || 1);
   for (let i = 0; i < count; i++) {
     const flake = document.createElement("i");
     flake.className = "flake";
