@@ -51,8 +51,7 @@ h1 {
 
 .grid {
   --grid-gap: clamp(12px, 1.8vw, 20px);
-  width: min(1100px, calc(100vw - 32px));
-  max-height: calc(100vh - clamp(190px, 22vh, 260px));
+  width: min(calc(100vw - 32px), clamp(360px, (100vh - 260px) * 1.5, 1100px));
   aspect-ratio: 6 / 4;
   margin: clamp(8px, 2vh, 24px) auto;
   display: grid;
@@ -382,6 +381,48 @@ footer {
 .lights.lights-on {
   mix-blend-mode: normal;
   opacity: 1;
+}
+
+@media (max-width: 1900px), (max-height: 1000px) {
+  header {
+    padding: clamp(16px, 3vw, 40px) 12px 6px;
+  }
+
+  .grid {
+    width: min(calc(100vw - 24px), clamp(300px, (100vh - 220px) * 1.5, 820px));
+    aspect-ratio: 6 / 4;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+    gap: clamp(8px, 1.2vw, 16px);
+  }
+
+  .door {
+    font-size: clamp(16px, 1.6vw, 24px);
+  }
+
+  footer {
+    padding-bottom: 6px;
+  }
+
+  .footer-track {
+    height: 100px;
+  }
+
+  .footer-text {
+    font-size: 12px;
+    bottom: 36px;
+  }
+
+  .footer-robot {
+    width: 64px;
+    height: 64px;
+    bottom: 12px;
+  }
+
+  .game-panel {
+    min-width: min(800px, 90vw);
+    min-height: min(520px, 60vh);
+  }
 }
 
 /* Snow (pure CSS for a tiny festive vibe) */
