@@ -31,7 +31,7 @@ body {
 }
 
 header {
-  padding: clamp(24px, 4vw, 48px) 20px 8px;
+  padding: clamp(24px, 4vw, 70px) 20px 8px;
   text-align: center;
   flex: 0 0 auto;
 }
@@ -362,6 +362,26 @@ footer {
 .footer-hint {
   font-size: 11px;
   color: rgba(234, 242, 255, 0.65);
+}
+
+.lights {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 140px;
+  background: url("../assets/XMasLights.png") repeat-x top center;
+  background-size: 320px auto;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0.9;
+  mix-blend-mode: multiply;
+  transition: mix-blend-mode 0.2s ease, opacity 0.2s ease;
+}
+
+.lights.lights-on {
+  mix-blend-mode: normal;
+  opacity: 1;
 }
 
 /* Snow (pure CSS for a tiny festive vibe) */

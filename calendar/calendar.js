@@ -1,7 +1,7 @@
 // Handles rendering and interactivity for the advent calendar experience.
 
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
-const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
+const ENFORCE_SERVER_DATE_LIMIT = false; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
 const STORAGE_KEY = "calendarUnlocked";
 const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";
@@ -20,6 +20,7 @@ const replayGameLink = document.getElementById("replayGame");
 const footerTrack = document.getElementById("footerTrack");
 const footerRobot = document.getElementById("footerRobot");
 const footerText = document.getElementById("footerText");
+const lightsElement = document.querySelector(".lights");
 
 const encoder = new TextEncoder();
 const payloadCache = new Map();
@@ -553,6 +554,7 @@ function createFooterRobotState() {
     textVX: 0,
     grounded: true,
     currentPlatform: null,
+    lastTextEdge: null,
     facing: startOnLeft ? "right" : "left",
   };
 }
@@ -678,6 +680,16 @@ function updateFooterRobotPhysics() {
     state.textX = maxTextX;
     state.textVX = 0;
   }
+  let currentEdge = null;
+  if (state.textX <= 0) {
+    currentEdge = "left";
+  } else if (state.textX >= maxTextX) {
+    currentEdge = "right";
+  }
+  if (currentEdge && currentEdge !== state.lastTextEdge) {
+    triggerLights();
+  }
+  state.lastTextEdge = currentEdge;
 }
 
 function handleFooterTextCollision(state, controls) {
@@ -780,4 +792,11 @@ function getFooterPlatformCollision(state, margin) {
     landed: true,
     height: platformHeight,
   };
+}
+
+function triggerLights() {
+  if (!lightsElement) {
+    return;
+  }
+  lightsElement.classList.add("lights-on");
 }
