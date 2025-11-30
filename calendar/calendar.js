@@ -552,6 +552,8 @@ function createFooterRobotState() {
     textX: textStart,
     textVX: 0,
     grounded: true,
+    currentPlatform: null,
+    facing: startOnLeft ? "right" : "left",
   };
 }
 
@@ -604,8 +606,8 @@ function updateFooterRobotPhysics() {
   const FRICTION = 0.86;
   const MAX_SPEED = 3.4;
   const GRAVITY = -0.3;
-  const JUMP_FORCE = 7;
-  const TEXT_PLATFORM_MARGIN = 6;
+  const JUMP_FORCE = 5.5;
+  const TEXT_PLATFORM_MARGIN = 5;
 
   if (controls.left) {
     state.robotVX = Math.max(state.robotVX - ACCEL, -MAX_SPEED);
@@ -636,12 +638,16 @@ function updateFooterRobotPhysics() {
       state.robotVY = 0;
     }
     groundedNow = true;
+    state.currentPlatform = platform.id;
   } else if (state.robotY <= 0) {
     state.robotY = 0;
     if (state.robotVY < 0) {
       state.robotVY = 0;
     }
     groundedNow = true;
+    state.currentPlatform = null;
+  } else {
+    state.currentPlatform = null;
   }
   state.grounded = groundedNow;
 
@@ -654,10 +660,15 @@ function updateFooterRobotPhysics() {
     state.robotX = maxRobotX;
     state.robotVX = 0;
   }
+  if (state.robotVX > 0.1) {
+    state.facing = "right";
+  } else if (state.robotVX < -0.1) {
+    state.facing = "left";
+  }
 
   state.textWidth = footerText.offsetWidth || state.textWidth;
   state.textVX *= 0.9;
-  handleFooterTextCollision(state, controls, platform);
+  handleFooterTextCollision(state, controls);
   state.textX += state.textVX;
   const maxTextX = Math.max(state.usableWidth - state.textWidth, 0);
   if (state.textX < 0) {
@@ -669,14 +680,14 @@ function updateFooterRobotPhysics() {
   }
 }
 
-function handleFooterTextCollision(state, controls, platform = null) {
+function handleFooterTextCollision(state, controls) {
   const textMin = state.textX;
   const textMax = state.textX + state.textWidth;
   const robotMin = state.robotX;
   const robotMax = state.robotX + state.robotWidth;
-  const verticalOverlap = state.robotY < state.robotHeight * 0.6;
+  const verticalOverlap = state.robotY < state.robotHeight * 0.25;
   const horizontalContact = robotMax > textMin && robotMin < textMax;
-  if (!horizontalContact || (platform?.onTop && platform?.landed)) {
+  if (!horizontalContact || !verticalOverlap || state.currentPlatform === "text") {
     return;
   }
   const direction = resolveFooterDirection(state, controls);
@@ -715,6 +726,7 @@ function applyFooterRobotTransforms() {
   const state = footerRobotState;
   footerRobot.style.left = `${state.robotX}px`;
   footerRobot.style.transform = `translate3d(0, ${-state.robotY}px, 0)`;
+  footerRobot.classList.toggle("robot-left", state.facing === "left");
   footerText.style.left = `${state.textX}px`;
 }
 
@@ -751,21 +763,21 @@ function getFooterTrackWidth() {
 }
 
 function getFooterPlatformCollision(state, margin) {
-  const platformHeight = state.robotHeight * 0.45;
+  const platformHeight = state.robotHeight * 0.5;
   const textMin = state.textX - margin;
   const textMax = state.textX + state.textWidth + margin;
   const robotMin = state.robotX;
   const robotMax = state.robotX + state.robotWidth;
-  const horizontalOverlap = robotMax > textMin && robotMin < textMax;
+  const robotCenter = robotMin + state.robotWidth / 2;
+  const horizontalOverlap = robotCenter > textMin && robotCenter < textMax;
   const descending = state.robotVY <= 0;
-  const nearPlatform = state.robotY <= platformHeight + state.robotHeight * 0.25;
-  const fullyAbove = robotMin >= textMin && robotMax <= textMax;
-  if (!horizontalOverlap || !descending || !nearPlatform || !fullyAbove) {
+  const nearPlatform = Math.abs(state.robotY - platformHeight) <= state.robotHeight * 0.35;
+  if (!horizontalOverlap || !descending || !nearPlatform) {
     return null;
   }
   return {
+    id: "text",
     landed: true,
-    onTop: true,
     height: platformHeight,
   };
 }
