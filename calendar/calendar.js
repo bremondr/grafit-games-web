@@ -1,8 +1,10 @@
 // Handles rendering and interactivity for the advent calendar experience.
 
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
+const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
 const STORAGE_KEY = "calendarUnlocked";
+const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";
 
 // Cached DOM lookups
 const grid = document.getElementById("grid");
@@ -26,6 +28,8 @@ let storedPasswords = loadStoredPasswords();
 let unityInstance = null;
 let unityLoaderScript = null;
 let unityMountedDay = null;
+let dateGateReady = !ENFORCE_SERVER_DATE_LIMIT;
+let maxActiveDay = ENFORCE_SERVER_DATE_LIMIT ? 0 : 24;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -38,6 +42,7 @@ function renderDoors() {
     const previewImg = btn.querySelector(".door__preview");
     hydrateDoorPreview(day, previewImg, btn);
     btn.addEventListener("click", () => openDay(day));
+    updateDoorInteractivity(day, btn);
     grid.appendChild(btn);
   });
 }
@@ -208,6 +213,7 @@ renderDoors();
 registerEvents();
 initSnow();
 bootstrapUnlockedPreviews();
+initDateGate();
 
 function loadStoredPasswords() {
   try {
@@ -354,6 +360,93 @@ function teardownUnity() {
   }
   unityLoaderScript = null;
   gamePanel.innerHTML = "";
+}
+
+function updateDoorInteractivity(day, button) {
+  const isUnlocked = isDayUnlocked(day);
+  button.disabled = !isUnlocked;
+  button.classList.toggle("door--locked", !isUnlocked);
+}
+
+function applyDoorLockState() {
+  doorPreviewRefs.forEach(({ button }, day) => {
+    if (button) {
+      updateDoorInteractivity(day, button);
+    }
+  });
+}
+
+function isDayUnlocked(day) {
+  if (!ENFORCE_SERVER_DATE_LIMIT) {
+    return true;
+  }
+  if (!dateGateReady) {
+    return false;
+  }
+  return day <= maxActiveDay;
+}
+
+async function initDateGate() {
+  if (!ENFORCE_SERVER_DATE_LIMIT) {
+    return;
+  }
+  try {
+    const serverCalendarInfo = await fetchServerCalendarInfo();
+    maxActiveDay = deriveMaxActiveDay(serverCalendarInfo);
+  } catch (error) {
+    console.warn("Server date lookup failed, falling back to client clock.", error);
+    maxActiveDay = deriveMaxActiveDay(createCalendarInfoFromDate(new Date()));
+  } finally {
+    dateGateReady = true;
+    applyDoorLockState();
+  }
+}
+
+async function fetchServerCalendarInfo() {
+  const response = await fetch(TIME_API_ENDPOINT, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Time endpoint responded with ${response.status}`);
+  }
+  const payload = await response.json();
+  if (typeof payload.datetime !== "string" || payload.datetime.length < 10) {
+    throw new Error("Time endpoint response missing datetime.");
+  }
+
+  const isoDate = payload.datetime;
+  const month = Number(isoDate.slice(5, 7));
+  const day = Number(isoDate.slice(8, 10));
+  if (Number.isNaN(month) || Number.isNaN(day)) {
+    throw new Error("Unable to parse datetime from server.");
+  }
+  return { month, day };
+}
+
+function deriveMaxActiveDay(calendarInfo) {
+  if (!calendarInfo) {
+    return 24;
+  }
+  const monthIndex = Number(calendarInfo.month) - 1;
+  const day = Number(calendarInfo.day);
+  if (Number.isNaN(monthIndex) || Number.isNaN(day)) {
+    return 24;
+  }
+  if (monthIndex < 11) {
+    return 0;
+  }
+  if (monthIndex > 11) {
+    return 24;
+  }
+  return Math.max(0, Math.min(day, 24));
+}
+
+function createCalendarInfoFromDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return { month: 1, day: 0 };
+  }
+  return {
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+  };
 }
 
 function hydrateDoorPreview(day, imgEl, button) {

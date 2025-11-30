@@ -26,17 +26,21 @@ body {
     radial-gradient(900px 500px at 110% -20%, #16213e 0%, rgba(22, 33, 62, 0) 60%),
     var(--bg);
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 header {
   padding: clamp(24px, 4vw, 48px) 20px 8px;
   text-align: center;
+  flex: 0 0 auto;
 }
 
 h1 {
   margin: 0 0 8px;
   font-size: clamp(28px, 4.5vw, 48px);
   letter-spacing: 0.5px;
+  color: gold;
 }
 
 .subtitle {
@@ -46,12 +50,15 @@ h1 {
 }
 
 .grid {
-  /* Responsive grid ensures all 24 doors tile nicely */
-  width: min(1100px, 94vw);
-  margin: 8px auto 48px;
+  --grid-gap: clamp(12px, 1.8vw, 20px);
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - clamp(190px, 22vh, 260px));
+  aspect-ratio: 6 / 4;
+  margin: clamp(8px, 2vh, 24px) auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: var(--grid-gap);
 }
 
 .door {
@@ -71,7 +78,7 @@ h1 {
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 22px;
+  font-size: clamp(20px, 2vw, 30px);
   color: var(--gold);
   text-shadow: 0 1px 0 #7a5c00;
 }
@@ -102,6 +109,14 @@ h1 {
   transform: translateY(-2px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
   border-color: rgba(255, 255, 255, 0.22);
+}
+
+.door:disabled,
+.door--locked {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+  transform: none;
 }
 
 
@@ -277,6 +292,7 @@ footer {
   text-align: center;
   padding: 8px 0 24px;
   font-size: 12px;
+  margin-top: auto;
 }
 
 /* Snow (pure CSS for a tiny festive vibe) */
