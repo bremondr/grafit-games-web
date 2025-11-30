@@ -1,7 +1,7 @@
 // Handles rendering and interactivity for the advent calendar experience.
 
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
-const ENFORCE_SERVER_DATE_LIMIT = false; // Flip to false for testing to keep every day clickable.
+const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
 const STORAGE_KEY = "calendarUnlocked";
 const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";
@@ -17,6 +17,9 @@ const closeModal = document.getElementById("closeModal");
 const unlockHint = document.getElementById("unlockHint");
 const gamePanel = document.getElementById("gamePanel");
 const replayGameLink = document.getElementById("replayGame");
+const footerTrack = document.getElementById("footerTrack");
+const footerRobot = document.getElementById("footerRobot");
+const footerText = document.getElementById("footerText");
 
 const encoder = new TextEncoder();
 const payloadCache = new Map();
@@ -30,6 +33,9 @@ let unityLoaderScript = null;
 let unityMountedDay = null;
 let dateGateReady = !ENFORCE_SERVER_DATE_LIMIT;
 let maxActiveDay = ENFORCE_SERVER_DATE_LIMIT ? 0 : 24;
+let footerRobotState = null;
+let footerRobotControls = { left: false, right: false, jump: false };
+let footerAnimationFrame = null;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -214,6 +220,7 @@ registerEvents();
 initSnow();
 bootstrapUnlockedPreviews();
 initDateGate();
+initFooterRobotEasterEgg();
 
 function loadStoredPasswords() {
   try {
@@ -502,4 +509,235 @@ async function bootstrapUnlockedPreviews() {
       forgetPassword(dayNum);
     }
   }
+}
+
+function initFooterRobotEasterEgg() {
+  if (!footerTrack || !footerRobot || !footerText) {
+    return;
+  }
+  footerRobotState = createFooterRobotState();
+  applyFooterRobotTransforms();
+  window.addEventListener("keydown", handleFooterRobotKeyDown);
+  window.addEventListener("keyup", handleFooterRobotKeyUp);
+  window.addEventListener("resize", () => {
+    if (!footerRobotState) {
+      return;
+    }
+    recalcFooterRobotStage();
+  });
+  footerAnimationFrame = requestAnimationFrame(stepFooterRobot);
+}
+
+ function createFooterRobotState() {
+  const margin = 0;
+  const trackWidth = getFooterTrackWidth();
+  const robotWidth = footerRobot.offsetWidth || 36;
+  const robotHeight = footerRobot.offsetHeight || 36;
+  const textWidth = footerText.offsetWidth || 150;
+  const usableWidth = Math.max(trackWidth - margin * 2, robotWidth + 20);
+  const textStart = clampValue((usableWidth - textWidth) / 2, 0, Math.max(usableWidth - textWidth, 0));
+  const startOnLeft = Math.random() < 0.5;
+  const startX = startOnLeft ? 0 : Math.max(usableWidth - robotWidth, 0);
+  return {
+    margin,
+    trackWidth,
+    usableWidth,
+    robotWidth,
+    robotHeight,
+    textWidth,
+    robotX: startX,
+    robotY: 0,
+    robotVX: 0,
+    robotVY: 0,
+    textX: textStart,
+    textVX: 0,
+    grounded: true,
+  };
+}
+
+function handleFooterRobotKeyDown(event) {
+  if (!footerRobotState || isTypingTarget(event.target)) {
+    return;
+  }
+  if (event.code === "ArrowLeft" || event.code === "ArrowRight" || event.code === "Space") {
+    event.preventDefault();
+  }
+  if (event.code === "ArrowLeft") {
+    footerRobotControls.left = true;
+  }
+  if (event.code === "ArrowRight") {
+    footerRobotControls.right = true;
+  }
+  if (event.code === "Space") {
+    footerRobotControls.jump = true;
+  }
+}
+
+function handleFooterRobotKeyUp(event) {
+  if (!footerRobotState) {
+    return;
+  }
+  if (event.code === "ArrowLeft") {
+    footerRobotControls.left = false;
+  }
+  if (event.code === "ArrowRight") {
+    footerRobotControls.right = false;
+  }
+  if (event.code === "Space") {
+    footerRobotControls.jump = false;
+  }
+}
+
+function stepFooterRobot() {
+  if (!footerRobotState) {
+    return;
+  }
+  updateFooterRobotPhysics();
+  applyFooterRobotTransforms();
+  footerAnimationFrame = requestAnimationFrame(stepFooterRobot);
+}
+
+function updateFooterRobotPhysics() {
+  const state = footerRobotState;
+  const controls = footerRobotControls;
+  const ACCEL = 0.28;
+  const FRICTION = 0.86;
+  const MAX_SPEED = 3.4;
+  const GRAVITY = -0.3;
+  const JUMP_FORCE = 7;
+
+  if (controls.left) {
+    state.robotVX = Math.max(state.robotVX - ACCEL, -MAX_SPEED);
+  }
+  if (controls.right) {
+    state.robotVX = Math.min(state.robotVX + ACCEL, MAX_SPEED);
+  }
+  if (!controls.left && !controls.right) {
+    state.robotVX *= FRICTION;
+    if (Math.abs(state.robotVX) < 0.01) {
+      state.robotVX = 0;
+    }
+  }
+
+  if (controls.jump && state.grounded) {
+    state.robotVY = JUMP_FORCE;
+    state.grounded = false;
+  }
+  if (!state.grounded) {
+    state.robotVY += GRAVITY;
+  }
+  state.robotY += state.robotVY;
+  if (state.robotY <= 0) {
+    state.robotY = 0;
+    if (state.robotVY < 0) {
+      state.robotVY = 0;
+    }
+    state.grounded = true;
+  }
+
+  state.robotX += state.robotVX;
+  const maxRobotX = Math.max(state.usableWidth - state.robotWidth, 0);
+  if (state.robotX < 0) {
+    state.robotX = 0;
+    state.robotVX = 0;
+  } else if (state.robotX > maxRobotX) {
+    state.robotX = maxRobotX;
+    state.robotVX = 0;
+  }
+
+  state.textWidth = footerText.offsetWidth || state.textWidth;
+  state.textVX *= 0.9;
+  handleFooterTextCollision(state, controls);
+  state.textX += state.textVX;
+  const maxTextX = Math.max(state.usableWidth - state.textWidth, 0);
+  if (state.textX < 0) {
+    state.textX = 0;
+    state.textVX = 0;
+  } else if (state.textX > maxTextX) {
+    state.textX = maxTextX;
+    state.textVX = 0;
+  }
+}
+
+function handleFooterTextCollision(state, controls) {
+  const textMin = state.textX;
+  const textMax = state.textX + state.textWidth;
+  const robotMin = state.robotX;
+  const robotMax = state.robotX + state.robotWidth;
+  const verticalOverlap = state.robotY < state.robotHeight * 0.6;
+  if (!verticalOverlap || robotMax <= textMin || robotMin >= textMax) {
+    return;
+  }
+  const direction = resolveFooterDirection(state, controls);
+  if (!direction) {
+    return;
+  }
+  const overlap = direction > 0 ? robotMax - textMin : textMax - robotMin;
+  state.textVX += direction * Math.min(Math.max(Math.abs(state.robotVX) * 0.4, 0.18), 1);
+  if (direction > 0) {
+    state.robotX -= overlap;
+  } else {
+    state.robotX += overlap;
+  }
+}
+
+function resolveFooterDirection(state, controls) {
+  if (state.robotVX > 0.05) {
+    return 1;
+  }
+  if (state.robotVX < -0.05) {
+    return -1;
+  }
+  if (controls.right && !controls.left) {
+    return 1;
+  }
+  if (controls.left && !controls.right) {
+    return -1;
+  }
+  return 0;
+}
+
+function applyFooterRobotTransforms() {
+  if (!footerRobotState) {
+    return;
+  }
+  const state = footerRobotState;
+  const robotX = state.robotX + state.margin;
+  const textX = state.textX + state.margin;
+  footerRobot.style.transform = `translate3d(${robotX}px, ${-state.robotY}px, 0)`;
+  footerText.style.transform = `translate3d(${textX}px, 0, 0)`;
+}
+
+function recalcFooterRobotStage() {
+  if (!footerRobotState) {
+    return;
+  }
+  const state = footerRobotState;
+  const previousUsable = state.usableWidth || 1;
+  state.trackWidth = getFooterTrackWidth();
+  state.usableWidth = Math.max(state.trackWidth - state.margin * 2, state.robotWidth + 20);
+  const scale = previousUsable > 0 ? state.usableWidth / previousUsable : 1;
+  state.robotWidth = footerRobot.offsetWidth || state.robotWidth;
+  state.robotHeight = footerRobot.offsetHeight || state.robotHeight;
+  state.textWidth = footerText.offsetWidth || state.textWidth;
+  state.robotX = clampValue(state.robotX * scale, 0, Math.max(state.usableWidth - state.robotWidth, 0));
+  state.textX = clampValue(state.textX * scale, 0, Math.max(state.usableWidth - state.textWidth, 0));
+}
+
+function isTypingTarget(element) {
+  if (!element) {
+    return false;
+  }
+  const tag = element.tagName?.toLowerCase();
+  return tag === "input" || tag === "textarea" || element.isContentEditable;
+}
+
+function clampValue(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getFooterTrackWidth() {
+  const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+  const trackWidth = footerTrack?.clientWidth || 0;
+  return Math.max(viewportWidth, trackWidth);
 }
