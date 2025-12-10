@@ -91,7 +91,7 @@ h1 {
   display: block;
   opacity: 0;
   transition: opacity 0.25s ease;
-  z-index: 0;
+  z-index: 10;
   pointer-events: none;
 }
 
@@ -305,6 +305,7 @@ footer {
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
   overflow: visible;
+  z-index: 40;
 }
 
 .footer-track::before {
@@ -327,7 +328,7 @@ footer {
   font-size: 14px;
   color: var(--muted);
   transition: color 0.2s ease;
-  z-index: 1;
+  z-index: 44;
 }
 
 .footer-link {
@@ -349,9 +350,9 @@ footer {
   height: 80px;
   background: url("../assets/Robot.png") center/contain no-repeat;
   image-rendering: optimizeQuality;
-  /* box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4); */
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
   transform: translate3d(0, 0, 0);
-  z-index: 2;
+  z-index: 45;
 }
 
 .footer-robot.robot-left {
@@ -372,9 +373,9 @@ footer {
   background: url("../assets/XMasLights.png") repeat-x top center;
   background-size: 320px auto;
   pointer-events: none;
-  z-index: 20;
-  opacity: 0.9;
-  mix-blend-mode: multiply;
+  z-index: 200;
+  opacity: 1;
+  mix-blend-mode: normal;
   transition: mix-blend-mode 0.2s ease, opacity 0.2s ease;
 }
 
@@ -431,7 +432,7 @@ footer {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  z-index: 0;
+  z-index: 10;
 }
 
 .flake {
@@ -445,8 +446,33 @@ footer {
   animation: fall linear infinite;
 }
 
+.snow-drift {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: clamp(48px, 12vw, 100px);
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 0 16px;
+  pointer-events: none;
+  z-index: 42;
+}
+
+.snow-drift__segment {
+  flex: 1;
+  min-height: 4px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(220, 233, 250, 0.92));
+  box-shadow: inset 0 -4px 8px rgba(255, 255, 255, 0.75), inset 0 3px 10px rgba(132, 180, 255, 0.45);
+  opacity: 0.92;
+  transition: height 0.18s ease-out;
+}
+
 @keyframes fall {
   to {
     transform: translateY(110vh);
   }
 }
+

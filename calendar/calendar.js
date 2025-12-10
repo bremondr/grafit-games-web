@@ -20,6 +20,7 @@ const replayGameLink = document.getElementById("replayGame");
 const footerTrack = document.getElementById("footerTrack");
 const footerRobot = document.getElementById("footerRobot");
 const footerText = document.getElementById("footerText");
+const snowDriftElement = document.getElementById("snowDrift");
 const lightsElement = document.querySelector(".lights");
 
 const encoder = new TextEncoder();
@@ -37,6 +38,9 @@ let maxActiveDay = ENFORCE_SERVER_DATE_LIMIT ? 0 : 24;
 let footerRobotState = null;
 let footerRobotControls = { left: false, right: false, jump: false };
 let footerAnimationFrame = null;
+let snowDriftState = null;
+let snowDriftAnimationFrame = null;
+let snowDriftResizeListenerAttached = false;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -202,7 +206,10 @@ function registerEvents() {
 
 function initSnow() {
   const holder = document.getElementById("snow");
-  const count = (60 * (currentDay || 1))%1000;
+  if (!holder) {
+    return 0;
+  }
+  const count = (60 * (currentDay || 1)) % 1000;
   for (let i = 0; i < count; i++) {
     const flake = document.createElement("i");
     flake.className = "flake";
@@ -212,14 +219,16 @@ function initSnow() {
     flake.style.width = flake.style.height = 2 + Math.random() * 4 + "px";
     holder.appendChild(flake);
   }
+  return count;
 }
 
 renderDoors();
 registerEvents();
-initSnow();
+const initialSnowflakeCount = initSnow();
 bootstrapUnlockedPreviews();
 initDateGate();
 initFooterRobotEasterEgg();
+initSnowDrift(initialSnowflakeCount);
 
 function loadStoredPasswords() {
   try {
@@ -510,6 +519,236 @@ async function bootstrapUnlockedPreviews() {
   }
 }
 
+function initSnowDrift(seedFlakeCount = 0) {
+  if (!snowDriftElement || snowDriftState) {
+    return;
+  }
+  const trackWidth = getFooterTrackWidth();
+  const segmentCount = resolveSnowDriftSegmentCount(trackWidth);
+  const baseHeight = clampValue(Math.round(trackWidth / 40), 8, 24);
+  const measuredHeight = snowDriftElement.getBoundingClientRect?.().height || snowDriftElement.offsetHeight || 0;
+  const fallbackHeight = Math.max(measuredHeight, baseHeight * 5);
+  snowDriftState = {
+    element: snowDriftElement,
+    segmentElements: [],
+    levels: new Array(segmentCount).fill(0),
+    baseHeight,
+    maxHeight: Math.max(fallbackHeight - baseHeight, Math.max(baseHeight * 4, 60)),
+    trackWidth,
+    segmentCount,
+    accumulationInterval: 90,
+    accumulationStep: 0.85,
+    settleInterval: 1400,
+    snowTimer: 0,
+    settleTimer: 0,
+    lastTimestamp: 0,
+  };
+  rebuildSnowDriftSegments(segmentCount);
+  seedSnowDriftLevels(seedFlakeCount);
+  renderSnowDrift();
+  if (!snowDriftResizeListenerAttached) {
+    window.addEventListener("resize", handleSnowDriftResize);
+    snowDriftResizeListenerAttached = true;
+  }
+  snowDriftAnimationFrame = requestAnimationFrame(stepSnowDrift);
+}
+
+function rebuildSnowDriftSegments(count) {
+  if (!snowDriftState) {
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < count; i++) {
+    const segment = document.createElement("span");
+    segment.className = "snow-drift__segment";
+    fragment.appendChild(segment);
+  }
+  snowDriftElement.innerHTML = "";
+  snowDriftElement.appendChild(fragment);
+  snowDriftState.segmentElements = Array.from(snowDriftElement.children);
+}
+
+function seedSnowDriftLevels(seedFlakeCount) {
+  if (!snowDriftState || !seedFlakeCount) {
+    return;
+  }
+  const state = snowDriftState;
+  const intensity = clampValue(seedFlakeCount / 600, 0, 1);
+  const coverage = clampValue(0.18 + intensity * 0.55, 0.18, 0.75);
+  const ridge = coverage * state.maxHeight;
+  state.levels = state.levels.map((_, index) => {
+    const normalized = state.segmentCount <= 1 ? 0 : index / (state.segmentCount - 1);
+    const ridgeBias = 0.75 + (1 - Math.abs(normalized - 0.5) * 1.4) * 0.35;
+    const noise = 0.7 + Math.random() * 0.6;
+    return clampValue(ridge * ridgeBias * noise, 0, state.maxHeight);
+  });
+}
+
+function handleSnowDriftResize() {
+  if (!snowDriftState) {
+    return;
+  }
+  const state = snowDriftState;
+  state.trackWidth = getFooterTrackWidth();
+  state.baseHeight = clampValue(Math.round(state.trackWidth / 40), 8, 24);
+  const measuredHeight =
+    snowDriftElement.getBoundingClientRect?.().height || snowDriftElement.offsetHeight || state.baseHeight * 4;
+  const fallbackHeight = Math.max(measuredHeight, state.baseHeight * 5);
+  state.maxHeight = Math.max(fallbackHeight - state.baseHeight, Math.max(state.baseHeight * 4, 60));
+  const newCount = resolveSnowDriftSegmentCount(state.trackWidth);
+  if (newCount !== state.segmentCount) {
+    resampleSnowDriftLevels(newCount);
+  } else {
+    renderSnowDrift();
+  }
+}
+
+function resampleSnowDriftLevels(newCount) {
+  if (!snowDriftState) {
+    return;
+  }
+  const state = snowDriftState;
+  const oldLevels = state.levels;
+  const newLevels = new Array(newCount).fill(0);
+  const maxOldIndex = Math.max(oldLevels.length - 1, 1);
+  for (let i = 0; i < newCount; i++) {
+    if (!oldLevels.length) {
+      break;
+    }
+    const target = (i / Math.max(newCount - 1, 1)) * maxOldIndex;
+    const leftIndex = Math.floor(target);
+    const rightIndex = Math.min(Math.ceil(target), oldLevels.length - 1);
+    const t = target - leftIndex;
+    const left = oldLevels[leftIndex] ?? 0;
+    const right = oldLevels[rightIndex] ?? left;
+    newLevels[i] = lerp(left, right, Number.isFinite(t) ? t : 0);
+  }
+  state.segmentCount = newCount;
+  state.levels = newLevels;
+  rebuildSnowDriftSegments(newCount);
+  renderSnowDrift();
+}
+
+function resolveSnowDriftSegmentCount(width) {
+  if (!width) {
+    return 24;
+  }
+  const approx = Math.round(width / 64);
+  return clampValue(approx, 12, 84);
+}
+
+function stepSnowDrift(timestamp) {
+  if (!snowDriftState) {
+    return;
+  }
+  const state = snowDriftState;
+  if (!state.lastTimestamp) {
+    state.lastTimestamp = timestamp;
+  }
+  const delta = Math.min(timestamp - state.lastTimestamp, 250);
+  state.lastTimestamp = timestamp;
+  state.snowTimer += delta;
+  state.settleTimer += delta;
+  let dirty = false;
+  while (state.snowTimer >= state.accumulationInterval) {
+    state.snowTimer -= state.accumulationInterval;
+    dirty = accumulateSnowDrift(state) || dirty;
+  }
+  if (state.settleTimer >= state.settleInterval) {
+    state.settleTimer = 0;
+    dirty = settleSnowDrift(state) || dirty;
+  }
+  if (dirty) {
+    renderSnowDrift();
+  }
+  snowDriftAnimationFrame = requestAnimationFrame(stepSnowDrift);
+}
+
+function accumulateSnowDrift(state) {
+  if (!state.levels.length) {
+    return false;
+  }
+  const index = Math.floor(Math.random() * state.levels.length);
+  const primaryAmount = state.accumulationStep * (0.5 + Math.random() * 1.1);
+  let dirty = addSnowToSegment(state, index, primaryAmount);
+  const spreadCount = 1 + Math.floor(Math.random() * 2);
+  for (let i = 1; i <= spreadCount; i++) {
+    const leftDirty = addSnowToSegment(state, index - i, primaryAmount * (0.5 / i));
+    const rightDirty = addSnowToSegment(state, index + i, primaryAmount * (0.45 / i));
+    dirty = leftDirty || rightDirty || dirty;
+  }
+  return dirty;
+}
+
+function addSnowToSegment(state, index, amount) {
+  if (!state || amount <= 0 || index == null) {
+    return false;
+  }
+  if (index < 0 || index >= state.levels.length) {
+    return false;
+  }
+  const next = clampValue((state.levels[index] || 0) + amount, 0, state.maxHeight);
+  if (next === state.levels[index]) {
+    return false;
+  }
+  state.levels[index] = next;
+  return true;
+}
+
+function settleSnowDrift(state) {
+  if (!state.levels.length) {
+    return false;
+  }
+  const nextLevels = state.levels.slice();
+  let dirty = false;
+  for (let i = 0; i < state.levels.length; i++) {
+    const current = state.levels[i];
+    const left = state.levels[i - 1] ?? current;
+    const right = state.levels[i + 1] ?? current;
+    const average = (left + current + right) / 3;
+    const target = Math.max(average - 0.02, 0);
+    const newHeight = clampValue(lerp(current, target, 0.08), 0, state.maxHeight);
+    if (Math.abs(newHeight - current) > 0.005) {
+      dirty = true;
+    }
+    nextLevels[i] = newHeight;
+  }
+  state.levels = nextLevels;
+  return dirty;
+}
+
+function renderSnowDrift() {
+  if (!snowDriftState || !snowDriftState.segmentElements.length) {
+    return;
+  }
+  const state = snowDriftState;
+  const max = Math.max(state.maxHeight, 1);
+  state.segmentElements.forEach((segment, index) => {
+    const level = state.levels[index] ?? 0;
+    const totalHeight = state.baseHeight + level;
+    segment.style.height = `${totalHeight}px`;
+    segment.style.opacity = (0.7 + (level / max) * 0.3).toFixed(2);
+  });
+}
+
+function getSnowDriftHeightAt(positionX) {
+  if (!snowDriftState || !snowDriftState.segmentCount) {
+    return 0;
+  }
+  const state = snowDriftState;
+  if (!state.trackWidth) {
+    return state.baseHeight;
+  }
+  const normalized = clampValue(positionX / state.trackWidth, 0, 1);
+  const scaled = normalized * Math.max(state.segmentCount - 1, 1);
+  const leftIndex = Math.floor(scaled);
+  const rightIndex = Math.min(Math.ceil(scaled), state.segmentCount - 1);
+  const t = scaled - leftIndex;
+  const left = state.levels[leftIndex] ?? 0;
+  const right = state.levels[rightIndex] ?? left;
+  return state.baseHeight + lerp(left, right, Number.isFinite(t) ? t : 0);
+}
+
 function initFooterRobotEasterEgg() {
   if (!footerTrack || !footerRobot || !footerText) {
     return;
@@ -766,6 +1005,10 @@ function isTypingTarget(element) {
 
 function clampValue(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function lerp(start, end, t) {
+  return start + (end - start) * clampValue(Number.isFinite(t) ? t : 0, 0, 1);
 }
 
 function getFooterTrackWidth() {
