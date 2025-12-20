@@ -247,12 +247,6 @@ function mountSnowScene(holder) {
   holder.innerHTML = "";
   holder.appendChild(canvas);
 
-  const flakeLayer = document.createElement("div");
-  flakeLayer.className = "flake-layer";
-  flakeLayer.setAttribute("aria-hidden", "true");
-  holder.appendChild(flakeLayer);
-  populateDecorativeFlakes(flakeLayer);
-
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     return null;
@@ -507,24 +501,6 @@ function mountSnowScene(holder) {
     }
     window.removeEventListener("resize", resize);
   };
-}
-
-function populateDecorativeFlakes(layer) {
-  if (!layer) {
-    return;
-  }
-  layer.innerHTML = "";
-  const count = Math.min(180, (90 * (currentDay || 1)) % 400);
-  for (let i = 0; i < count; i++) {
-    const flake = document.createElement("i");
-    flake.className = "flake";
-    flake.style.left = Math.random() * 100 + "vw";
-    flake.style.animationDuration = 8 + Math.random() * 18 + "s";
-    flake.style.opacity = (0.35 + Math.random() * 0.45).toFixed(2);
-    const size = 18 + Math.random() * 18;
-    flake.style.width = flake.style.height = `${size}px`;
-    layer.appendChild(flake);
-  }
 }
 
 renderDoors();

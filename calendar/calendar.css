@@ -520,16 +520,11 @@ footer {
   display: block;
 }
 
-.snow canvas,
-.snow .flake-layer {
+.snow canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-.snow .flake-layer {
-  overflow: hidden;
 }
 
 .flake {
