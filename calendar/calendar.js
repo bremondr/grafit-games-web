@@ -267,7 +267,7 @@ function mountSnowScene(holder) {
     running: true,
   };
 
-  const targetFlakes = Math.min(320, 140 + (currentDay || 1) * 5);
+  const targetFlakes = Math.min(500, 140 + (currentDay || 1) * 8);
 
   function createFlake(x, y) {
     return {
@@ -391,7 +391,7 @@ function mountSnowScene(holder) {
 
       const groundY = state.height - groundHeight(flake.x);
       if (flake.y + flake.r >= groundY) {
-        addSnow(flake.x, flake.r * 1.4);
+        addSnow(flake.x, flake.r * 4);
         resetFlake(flake);
         continue;
       }
