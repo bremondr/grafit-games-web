@@ -60,6 +60,10 @@ h1 {
   gap: var(--grid-gap);
 }
 
+.grid.grid--complete {
+  gap: 0;
+}
+
 .door {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -116,6 +120,28 @@ h1 {
   opacity: 0.5;
   box-shadow: none;
   transform: none;
+}
+
+.grid.grid--complete .door {
+  border-radius: 0;
+  border: 0;
+  background: none;
+  transform: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.grid.grid--complete .door:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.grid.grid--complete .door__preview {
+  opacity: 1;
+}
+
+.grid.grid--complete .door span {
+  opacity: 0;
 }
 
 

@@ -1,7 +1,8 @@
 // Handles rendering and interactivity for the advent calendar experience.
 
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
-const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
+const TOTAL_DAYS = ORDER.length;
+const ENFORCE_SERVER_DATE_LIMIT = false; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
 const STORAGE_KEY = "calendarUnlocked";
 const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";
@@ -37,6 +38,7 @@ let maxActiveDay = ENFORCE_SERVER_DATE_LIMIT ? 0 : 24;
 let footerRobotState = null;
 let footerRobotControls = { left: false, right: false, jump: false };
 let footerAnimationFrame = null;
+let calendarComplete = false;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -215,6 +217,7 @@ function initSnow() {
 }
 
 renderDoors();
+updateCompletionState();
 registerEvents();
 initSnow();
 bootstrapUnlockedPreviews();
@@ -477,6 +480,7 @@ function setDoorPreview(day, blob) {
     refs.imgEl.src = previewUrl;
     refs.button.classList.add("has-preview");
   }
+  updateCompletionState();
 }
 
 function clearDoorPreview(day) {
@@ -491,6 +495,23 @@ function clearDoorPreview(day) {
     refs.imgEl.removeAttribute("src");
     refs.button.classList.remove("has-preview");
   }
+  updateCompletionState();
+}
+
+function hasDoorPreview(day) {
+  return doorPreviewCache.has(day.toString());
+}
+
+function updateCompletionState() {
+  if (!grid) {
+    return;
+  }
+  const complete = doorPreviewCache.size >= TOTAL_DAYS && ORDER.every(hasDoorPreview);
+  if (complete === calendarComplete) {
+    return;
+  }
+  calendarComplete = complete;
+  grid.classList.toggle("grid--complete", complete);
 }
 
 async function bootstrapUnlockedPreviews() {
