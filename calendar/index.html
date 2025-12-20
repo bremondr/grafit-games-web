@@ -31,6 +31,18 @@
   <!-- Doors grid remains empty until JS renders the randomized order -->
   <main class="grid" id="grid" aria-live="polite"></main>
 
+  <section class="finale-panel" id="finalePanel" hidden>
+    <p class="finale-panel__lead">
+      Všechny obrázky jsou odemčené! Zadej poslední kód a odkryj závěrečnou zprávu.
+    </p>
+    <div class="input-row finale-panel__input">
+      <input id="finaleInput" type="text" placeholder="Zadej tajný kód" autocomplete="off" />
+      <button class="btn primary" type="button" id="finaleSubmit">Zobrazit</button>
+    </div>
+    <small id="finaleHint" class="finale-hint" hidden aria-live="polite"></small>
+    <div class="finale-message" id="finaleMessage" hidden></div>
+  </section>
+
   <!-- Modal that shows the selected day and handles the unlock flow -->
   <dialog id="dayModal" aria-labelledby="modalTitle">
     <div class="modal-head">

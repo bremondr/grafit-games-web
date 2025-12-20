@@ -4,7 +4,9 @@ const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8
 const TOTAL_DAYS = ORDER.length;
 const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
+const FINAL_MESSAGE_URL = "messages/finale.json";
 const STORAGE_KEY = "calendarUnlocked";
+const FINAL_MESSAGE_STORAGE_KEY = "calendarFinalMessage";
 const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";
 
 // Cached DOM lookups
@@ -22,8 +24,14 @@ const footerTrack = document.getElementById("footerTrack");
 const footerRobot = document.getElementById("footerRobot");
 const footerText = document.getElementById("footerText");
 const lightsElement = document.querySelector(".lights");
+const finalePanel = document.getElementById("finalePanel");
+const finaleInput = document.getElementById("finaleInput");
+const finaleSubmit = document.getElementById("finaleSubmit");
+const finaleHint = document.getElementById("finaleHint");
+const finaleMessage = document.getElementById("finaleMessage");
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 const payloadCache = new Map();
 const doorPreviewRefs = new Map();
 const doorPreviewCache = new Map();
@@ -39,6 +47,9 @@ let footerRobotState = null;
 let footerRobotControls = { left: false, right: false, jump: false };
 let footerAnimationFrame = null;
 let calendarComplete = false;
+let finalMessagePayloadPromise = null;
+let storedFinalMessage = loadStoredFinalMessage();
+let attemptedFinalAutoReveal = false;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -200,6 +211,20 @@ function registerEvents() {
     resetModalState();
     teardownUnity();
   });
+  if (finaleSubmit && finaleInput) {
+    const submitFinale = (event) => {
+      if (event) {
+        event.preventDefault();
+      }
+      handleFinaleUnlock();
+    };
+    finaleSubmit.addEventListener("click", submitFinale);
+    finaleInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        submitFinale(event);
+      }
+    });
+  }
 }
 
 function initSnow() {
@@ -512,6 +537,7 @@ function updateCompletionState() {
   }
   calendarComplete = complete;
   grid.classList.toggle("grid--complete", complete);
+  toggleFinalePanel(complete);
 }
 
 async function bootstrapUnlockedPreviews() {
@@ -528,6 +554,196 @@ async function bootstrapUnlockedPreviews() {
       console.warn(`Failed to restore preview for day ${dayNum}`, error);
       forgetPassword(dayNum);
     }
+  }
+}
+
+function loadFinalMessagePayload() {
+  if (!finalMessagePayloadPromise) {
+    finalMessagePayloadPromise = fetch(FINAL_MESSAGE_URL, { cache: "no-store" }).then((response) => {
+      if (!response.ok) {
+        throw new Error(`Nepodarilo se nacist tajnou zpravu: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+  return finalMessagePayloadPromise;
+}
+
+async function decryptFinalMessage(password) {
+  if (!window.crypto?.subtle) {
+    throw new Error("Prohlizec nepodporuje Web Crypto API.");
+  }
+  if (!password) {
+    throw new Error("Chybi heslo.");
+  }
+  const payload = await loadFinalMessagePayload();
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: base64ToArrayBuffer(payload.salt),
+      iterations: payload.iterations,
+      hash: "SHA-1",
+    },
+    keyMaterial,
+    { name: "AES-CBC", length: 256 },
+    false,
+    ["decrypt"],
+  );
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: "AES-CBC",
+      iv: base64ToArrayBuffer(payload.iv),
+    },
+    key,
+    base64ToArrayBuffer(payload.data),
+  );
+  return decoder.decode(new Uint8Array(decrypted));
+}
+
+async function handleFinaleUnlock() {
+  if (!calendarComplete || !finaleInput || !finaleSubmit) {
+    return;
+  }
+  const password = finaleInput.value.trim();
+  if (!password) {
+    finaleInput.focus();
+    return;
+  }
+  setFinaleHintMessage("");
+  setFinaleLoading(true);
+  try {
+    const message = await decryptFinalMessage(password);
+    showFinalMessage(message);
+    rememberFinalMessage(password, message);
+  } catch (error) {
+    console.error("Final message decrypt failed", error);
+    setFinaleHintMessage("Nesprávný kód. Zkus to znovu.");
+    finaleInput.focus();
+  } finally {
+    setFinaleLoading(false);
+  }
+}
+
+function showFinalMessage(text) {
+  if (!finaleMessage || !finalePanel) {
+    return;
+  }
+  finaleMessage.textContent = text;
+  finaleMessage.hidden = false;
+  finalePanel.classList.add("finale-panel--unlocked");
+  setFinaleHintMessage("");
+}
+
+function setFinaleLoading(isLoading) {
+  if (finaleSubmit) {
+    finaleSubmit.disabled = isLoading;
+  }
+  if (finaleInput) {
+    finaleInput.disabled = isLoading;
+  }
+}
+
+function setFinaleHintMessage(text) {
+  if (!finaleHint) {
+    return;
+  }
+  if (!text) {
+    finaleHint.textContent = "";
+    finaleHint.hidden = true;
+    return;
+  }
+  finaleHint.textContent = text;
+  finaleHint.hidden = false;
+}
+
+function toggleFinalePanel(show) {
+  if (!finalePanel) {
+    return;
+  }
+  finalePanel.hidden = !show;
+  if (show && !attemptedFinalAutoReveal) {
+    attemptedFinalAutoReveal = true;
+    autoRevealFinalMessage();
+  } else if (!show) {
+    attemptedFinalAutoReveal = false;
+    setFinaleHintMessage("");
+    if (finaleInput) {
+      finaleInput.value = "";
+      finaleInput.disabled = false;
+    }
+    if (finaleMessage) {
+      finaleMessage.hidden = true;
+      finaleMessage.textContent = "";
+    }
+    finalePanel.classList.remove("finale-panel--unlocked");
+  }
+}
+
+async function autoRevealFinalMessage() {
+  if (!storedFinalMessage) {
+    return;
+  }
+  if (storedFinalMessage.text) {
+    showFinalMessage(storedFinalMessage.text);
+  }
+  if (!storedFinalMessage.password) {
+    return;
+  }
+  try {
+    setFinaleLoading(true);
+    const message = await decryptFinalMessage(storedFinalMessage.password);
+    showFinalMessage(message);
+    rememberFinalMessage(storedFinalMessage.password, message);
+    if (finaleInput) {
+      finaleInput.value = storedFinalMessage.password;
+    }
+  } catch (error) {
+    console.warn("Stored finale password invalid, clearing entry.", error);
+    forgetFinalMessage();
+    if (finaleInput) {
+      finaleInput.value = "";
+    }
+  } finally {
+    setFinaleLoading(false);
+  }
+}
+
+function rememberFinalMessage(password, message) {
+  storedFinalMessage = { password, text: message };
+  persistFinalMessage();
+}
+
+function persistFinalMessage() {
+  try {
+    if (storedFinalMessage) {
+      localStorage.setItem(FINAL_MESSAGE_STORAGE_KEY, JSON.stringify(storedFinalMessage));
+    } else {
+      localStorage.removeItem(FINAL_MESSAGE_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function loadStoredFinalMessage() {
+  try {
+    const raw = localStorage.getItem(FINAL_MESSAGE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function forgetFinalMessage() {
+  storedFinalMessage = null;
+  persistFinalMessage();
+  if (finaleMessage) {
+    finaleMessage.hidden = true;
+    finaleMessage.textContent = "";
+  }
+  if (finalePanel) {
+    finalePanel.classList.remove("finale-panel--unlocked");
   }
 }
 

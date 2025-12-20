@@ -60,6 +60,51 @@ h1 {
   gap: var(--grid-gap);
 }
 
+.finale-panel {
+  width: min(calc(100vw - 32px), 860px);
+  margin: 16px auto clamp(24px, 4vh, 48px);
+  padding: 24px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(9, 14, 30, 0.85);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.finale-panel__lead {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: clamp(16px, 2vw, 20px);
+}
+
+.finale-panel__input {
+  width: 100%;
+}
+
+.finale-hint {
+  color: #ff7961;
+}
+
+.finale-message {
+  border-radius: 16px;
+  border: 1px solid rgba(247, 201, 72, 0.4);
+  background: rgba(247, 201, 72, 0.05);
+  padding: 18px;
+  font-size: clamp(16px, 2vw, 20px);
+  line-height: 1.6;
+  color: #ffe9b0;
+  text-align: center;
+}
+
+.finale-panel--unlocked {
+  border-color: rgba(247, 201, 72, 0.6);
+  box-shadow: 0 0 35px rgba(247, 201, 72, 0.25);
+}
+
 .grid.grid--complete {
   gap: 0;
   width: min(calc(100vw - 16px), clamp(480px, (100vh - 140px) * 1.5, 1600px));
