@@ -62,6 +62,8 @@ h1 {
 
 .grid.grid--complete {
   gap: 0;
+  width: min(calc(100vw - 16px), clamp(480px, (100vh - 140px) * 1.5, 1600px));
+  margin: clamp(8px, 1vh, 18px) auto;
 }
 
 .door {
