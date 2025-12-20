@@ -229,14 +229,15 @@ function registerEvents() {
 
 function initSnow() {
   const holder = document.getElementById("snow");
-  const count = (60 * (currentDay || 1))%1000;
+  const count = Math.min(180, (90 * (currentDay || 1)) % 400);
   for (let i = 0; i < count; i++) {
     const flake = document.createElement("i");
     flake.className = "flake";
     flake.style.left = Math.random() * 100 + "vw";
-    flake.style.animationDuration = 6 + Math.random() * 12 + "s";
-    flake.style.opacity = (0.4 + Math.random() * 0.6).toFixed(2);
-    flake.style.width = flake.style.height = 2 + Math.random() * 4 + "px";
+    flake.style.animationDuration = 8 + Math.random() * 18 + "s";
+    flake.style.opacity = (0.35 + Math.random() * 0.45).toFixed(2);
+    const size = 18 + Math.random() * 18;
+    flake.style.width = flake.style.height = `${size}px`;
     holder.appendChild(flake);
   }
 }
