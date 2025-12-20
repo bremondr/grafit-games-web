@@ -50,6 +50,7 @@ let calendarComplete = false;
 let finalMessagePayloadPromise = null;
 let storedFinalMessage = loadStoredFinalMessage();
 let attemptedFinalAutoReveal = false;
+let teardownSnowScene = null;
 
 function renderDoors() {
   grid.innerHTML = "";
@@ -229,6 +230,223 @@ function registerEvents() {
 
 function initSnow() {
   const holder = document.getElementById("snow");
+  if (!holder) {
+    return;
+  }
+  if (typeof teardownSnowScene === "function") {
+    teardownSnowScene();
+    teardownSnowScene = null;
+  }
+  teardownSnowScene = mountSnowScene(holder);
+}
+
+function mountSnowScene(holder) {
+  const canvas = document.createElement("canvas");
+  canvas.className = "snow-canvas";
+  canvas.setAttribute("aria-hidden", "true");
+  holder.innerHTML = "";
+  holder.appendChild(canvas);
+
+  const flakeLayer = document.createElement("div");
+  flakeLayer.className = "flake-layer";
+  flakeLayer.setAttribute("aria-hidden", "true");
+  holder.appendChild(flakeLayer);
+  populateDecorativeFlakes(flakeLayer);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  const state = {
+    ctx,
+    canvas,
+    width: 0,
+    height: 0,
+    dpr: Math.min(window.devicePixelRatio || 1, 2),
+    flakes: [],
+    bins: [],
+    binWidth: 4,
+    last: performance.now(),
+    elapsed: 0,
+    raf: null,
+    running: true,
+  };
+
+  const targetFlakes = Math.min(320, 140 + (currentDay || 1) * 5);
+
+  function createFlake(x, y) {
+    return {
+      x,
+      y,
+      r: 0.8 + Math.random() * 2.4,
+      vy: 18 + Math.random() * 26,
+      swayAmp: 10 + Math.random() * 26,
+      swaySpeed: 0.2 + Math.random() * 0.4,
+      phase: Math.random() * Math.PI * 2,
+    };
+  }
+
+  function resetFlake(flake) {
+    flake.x = Math.random() * state.width;
+    flake.y = -20 - Math.random() * 40;
+    flake.r = 0.8 + Math.random() * 2.4;
+    flake.vy = 18 + Math.random() * 28;
+    flake.swayAmp = 10 + Math.random() * 28;
+    flake.swaySpeed = 0.2 + Math.random() * 0.45;
+    flake.phase = Math.random() * Math.PI * 2;
+  }
+
+  function resize() {
+    state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = window.innerWidth;
+    const cssH = window.innerHeight;
+    canvas.width = Math.floor(cssW * state.dpr);
+    canvas.height = Math.floor(cssH * state.dpr);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(state.dpr, state.dpr);
+    state.width = cssW;
+    state.height = cssH;
+    state.binWidth = Math.max(2, Math.floor(4 * state.dpr)) / state.dpr;
+    const binCount = Math.max(1, Math.ceil(state.width / state.binWidth));
+    state.bins = new Array(binCount).fill(0);
+    if (!state.flakes.length) {
+      for (let i = 0; i < targetFlakes; i++) {
+        state.flakes.push(createFlake(Math.random() * state.width, Math.random() * state.height));
+      }
+    } else {
+      state.flakes.forEach((flake) => {
+        flake.x = Math.random() * state.width;
+        flake.y = Math.random() * state.height;
+      });
+    }
+  }
+
+  function groundHeight(px) {
+    if (!state.bins.length) {
+      return 0;
+    }
+    const idx = Math.max(0, Math.min(state.bins.length - 1, Math.floor(px / state.binWidth)));
+    return state.bins[idx];
+  }
+
+  function addSnow(px, amount) {
+    if (!state.bins.length) {
+      return;
+    }
+    const idx = Math.floor(px / state.binWidth);
+    for (let k = -2; k <= 2; k++) {
+      const j = idx + k;
+      if (j < 0 || j >= state.bins.length) continue;
+      const weight = k === 0 ? 1 : Math.abs(k) === 1 ? 0.65 : 0.35;
+      state.bins[j] = Math.min(state.height * 0.35, state.bins[j] + amount * weight);
+    }
+    const center = Math.max(1, Math.min(state.bins.length - 2, idx));
+    state.bins[center] = (state.bins[center - 1] + state.bins[center] + state.bins[center + 1]) / 3;
+  }
+
+  function drawGround() {
+    if (!state.bins.length) {
+      return;
+    }
+    const maxSnow = state.bins.reduce((m, v) => (v > m ? v : m), 0);
+    if (maxSnow <= 0.5) {
+      return;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, state.height);
+    for (let i = 0; i < state.bins.length; i++) {
+      const x = i * state.binWidth;
+      const y = state.height - state.bins[i];
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(state.width, state.height);
+    ctx.closePath();
+
+    const fadeTop = Math.max(state.height - maxSnow - 20, state.height - 220);
+    const gradient = ctx.createLinearGradient(0, state.height, 0, fadeTop);
+    gradient.addColorStop(0, "rgba(255,255,255,0.95)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function update(dt) {
+    const wind = Math.sin(state.elapsed * 0.12) * 6;
+    for (let i = 0; i < state.flakes.length; i++) {
+      const flake = state.flakes[i];
+      flake.y += flake.vy * dt;
+      flake.x += wind * dt + Math.sin(flake.phase + state.elapsed * flake.swaySpeed) * flake.swayAmp * dt * 0.6;
+
+      if (flake.x < -20) flake.x = state.width + 20;
+      if (flake.x > state.width + 20) flake.x = -20;
+
+      const groundY = state.height - groundHeight(flake.x);
+      if (flake.y + flake.r >= groundY) {
+        addSnow(flake.x, flake.r * 1.4);
+        resetFlake(flake);
+        continue;
+      }
+      if (flake.y - flake.r > state.height + 40) {
+        resetFlake(flake);
+      }
+    }
+  }
+
+  function drawFlakes() {
+    ctx.save();
+    for (let i = 0; i < state.flakes.length; i++) {
+      const flake = state.flakes[i];
+      const alpha = Math.min(0.9, 0.25 + flake.r * 0.18);
+      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(flake.x, flake.y, flake.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    if (!state.running) {
+      return;
+    }
+    const dt = Math.min(0.05, (now - state.last) / 1000);
+    state.last = now;
+    state.elapsed += dt;
+    ctx.clearRect(0, 0, state.width, state.height);
+    update(dt);
+    drawFlakes();
+    drawGround();
+    state.raf = requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  loop(performance.now());
+
+  return () => {
+    state.running = false;
+    if (state.raf) {
+      cancelAnimationFrame(state.raf);
+    }
+    window.removeEventListener("resize", resize);
+  };
+}
+
+function populateDecorativeFlakes(layer) {
+  if (!layer) {
+    return;
+  }
+  layer.innerHTML = "";
   const count = Math.min(180, (90 * (currentDay || 1)) % 400);
   for (let i = 0; i < count; i++) {
     const flake = document.createElement("i");
@@ -238,7 +456,7 @@ function initSnow() {
     flake.style.opacity = (0.35 + Math.random() * 0.45).toFixed(2);
     const size = 18 + Math.random() * 18;
     flake.style.width = flake.style.height = `${size}px`;
-    holder.appendChild(flake);
+    layer.appendChild(flake);
   }
 }
 
