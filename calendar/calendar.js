@@ -66,6 +66,7 @@ function renderDoors() {
     updateDoorInteractivity(day, btn);
     grid.appendChild(btn);
   });
+  updateCompletionState();
 }
 
 function openDay(day) {
@@ -534,6 +535,7 @@ function rememberPassword(day, password) {
   }
   storedPasswords[day] = password;
   persistPasswords();
+  updateCompletionState();
 }
 
 function forgetPassword(day) {
@@ -541,6 +543,7 @@ function forgetPassword(day) {
     delete storedPasswords[day];
     persistPasswords();
     clearDoorPreview(day);
+    updateCompletionState();
   }
 }
 
@@ -789,16 +792,29 @@ function hasDoorPreview(day) {
   return doorPreviewCache.has(day.toString());
 }
 
+function hasAllStoredPasswords() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return false;
+    }
+    const snapshot = JSON.parse(raw);
+    return ORDER.every((day) => Boolean(snapshot?.[day]));
+  } catch {
+    return false;
+  }
+}
+
 function updateCompletionState() {
   if (!grid) {
+    toggleFinalePanel(false);
     return;
   }
-  const complete = doorPreviewCache.size >= TOTAL_DAYS && ORDER.every(hasDoorPreview);
-  if (complete === calendarComplete) {
-    return;
-  }
-  calendarComplete = complete;
+  const previewsComplete = doorPreviewCache.size >= TOTAL_DAYS && ORDER.every(hasDoorPreview);
+  const passwordsComplete = hasAllStoredPasswords();
+  const complete = previewsComplete && passwordsComplete;
   grid.classList.toggle("grid--complete", complete);
+  calendarComplete = complete;
   toggleFinalePanel(complete);
 }
 
@@ -924,6 +940,7 @@ function toggleFinalePanel(show) {
     return;
   }
   finalePanel.hidden = !show;
+  finalePanel.style.display = show ? "flex" : "none";
   if (show && !attemptedFinalAutoReveal) {
     attemptedFinalAutoReveal = true;
     autoRevealFinalMessage();
