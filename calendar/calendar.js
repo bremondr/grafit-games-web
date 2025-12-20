@@ -284,6 +284,8 @@ function mountSnowScene(holder) {
       swayAmp: 10 + Math.random() * 26,
       swaySpeed: 0.2 + Math.random() * 0.4,
       phase: Math.random() * Math.PI * 2,
+      angle: Math.random() * Math.PI * 2,
+      spin: -0.35 + Math.random() * 0.7,
     };
   }
 
@@ -295,6 +297,8 @@ function mountSnowScene(holder) {
     flake.swayAmp = 10 + Math.random() * 28;
     flake.swaySpeed = 0.2 + Math.random() * 0.45;
     flake.phase = Math.random() * Math.PI * 2;
+    flake.angle = Math.random() * Math.PI * 2;
+    flake.spin = -0.35 + Math.random() * 0.7;
   }
 
   function resize() {
@@ -386,6 +390,7 @@ function mountSnowScene(holder) {
       const flake = state.flakes[i];
       flake.y += flake.vy * dt;
       flake.x += wind * dt + Math.sin(flake.phase + state.elapsed * flake.swaySpeed) * flake.swayAmp * dt * 0.6;
+      flake.angle += flake.spin * dt;
 
       if (flake.x < -20) flake.x = state.width + 20;
       if (flake.x > state.width + 20) flake.x = -20;
@@ -405,13 +410,75 @@ function mountSnowScene(holder) {
   function drawFlakes() {
     ctx.save();
     for (let i = 0; i < state.flakes.length; i++) {
-      const flake = state.flakes[i];
-      const alpha = Math.min(0.9, 0.25 + flake.r * 0.18);
-      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
-      ctx.beginPath();
-      ctx.arc(flake.x, flake.y, flake.r, 0, Math.PI * 2);
-      ctx.fill();
+      drawStylizedFlake(state.flakes[i]);
     }
+    ctx.restore();
+  }
+
+  function drawArmSegments(context, length) {
+    const branch1 = -length * 0.58;
+    const branch2 = -length * 0.82;
+    context.moveTo(0, 0);
+    context.lineTo(0, -length);
+    context.moveTo(0, branch1);
+    context.lineTo(length * 0.28, branch1 + length * 0.22);
+    context.moveTo(0, branch1);
+    context.lineTo(-length * 0.28, branch1 + length * 0.22);
+    context.moveTo(0, branch2);
+    context.lineTo(length * 0.22, branch2 + length * 0.18);
+    context.moveTo(0, branch2);
+    context.lineTo(-length * 0.22, branch2 + length * 0.18);
+  }
+
+  function drawHexPath(context, radius) {
+    for (let i = 0; i <= 6; i++) {
+      const ang = Math.PI / 6 + (i * Math.PI) / 3;
+      const x = Math.cos(ang) * radius;
+      const y = Math.sin(ang) * radius;
+      if (i === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    }
+  }
+
+  function drawStylizedFlake(flake) {
+    const size = 6 + flake.r * 4.5;
+    const alpha = Math.min(0.95, 0.35 + flake.r * 0.2);
+    ctx.save();
+    ctx.translate(flake.x, flake.y);
+    ctx.rotate(flake.angle);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+
+    ctx.lineWidth = Math.max(0.6, size * 0.12);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      ctx.save();
+      ctx.rotate((Math.PI * 2 * i) / 6);
+      drawArmSegments(ctx, size);
+      ctx.restore();
+    }
+    ctx.stroke();
+
+    const inner = size * 0.55;
+    ctx.lineWidth = Math.max(0.5, size * 0.08);
+    ctx.beginPath();
+    drawHexPath(ctx, inner);
+    ctx.stroke();
+
+    const diagX = Math.cos(Math.PI / 6) * inner;
+    const diagY = Math.sin(Math.PI / 6) * inner;
+    ctx.beginPath();
+    ctx.moveTo(0, -inner);
+    ctx.lineTo(0, inner);
+    ctx.moveTo(-diagX, -diagY);
+    ctx.lineTo(diagX, diagY);
+    ctx.moveTo(-diagX, diagY);
+    ctx.lineTo(diagX, -diagY);
+    ctx.stroke();
     ctx.restore();
   }
 
