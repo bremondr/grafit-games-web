@@ -100,6 +100,17 @@ h1 {
   text-align: center;
 }
 
+.finale-message-link {
+  color: var(--gold);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.finale-highlight {
+  color: #f7c948;
+  font-weight: 600;
+}
+
 .finale-panel--unlocked {
   border-color: rgba(247, 201, 72, 0.6);
   box-shadow: 0 0 35px rgba(247, 201, 72, 0.25);

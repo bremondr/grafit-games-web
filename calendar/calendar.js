@@ -629,7 +629,7 @@ function showFinalMessage(text) {
   if (!finaleMessage || !finalePanel) {
     return;
   }
-  finaleMessage.textContent = text;
+  finaleMessage.innerHTML = text;
   finaleMessage.hidden = false;
   finalePanel.classList.add("finale-panel--unlocked");
   setFinaleHintMessage("");
