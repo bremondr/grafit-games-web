@@ -2,7 +2,7 @@
 
 const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
 const TOTAL_DAYS = ORDER.length;
-const ENFORCE_SERVER_DATE_LIMIT = true; // Flip to false for testing to keep every day clickable.
+const ENFORCE_SERVER_DATE_LIMIT = false; // Flip to false for testing to keep every day clickable.
 const ENCRYPTED_DIR = "images";
 const FINAL_MESSAGE_URL = "messages/finale.json";
 const STORAGE_KEY = "calendarUnlocked";
