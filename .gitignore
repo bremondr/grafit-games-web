@@ -19,4 +19,4 @@
 # Test files
 
 # Secrets / private assets
-calendar/private/
+calendar/*/private/

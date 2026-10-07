@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   /* Shared color palette for winter/night feel */
   --bg: #0b1220;
   --text: #eaf2ff;
@@ -432,7 +432,7 @@ footer {
   left: 24px;
   width: 80px;
   height: 80px;
-  background: url("../assets/Robot.png") center/contain no-repeat;
+  background: url("../../assets/Robot.png") center/contain no-repeat;
   image-rendering: optimizeQuality;
   /* box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4); */
   transform: translate3d(0, 0, 0);
@@ -440,7 +440,7 @@ footer {
 }
 
 .footer-robot.robot-left {
-  background-image: url("../assets/Robot2.png");
+  background-image: url("../../assets/Robot2.png");
 }
 
 .footer-hint {
@@ -454,7 +454,7 @@ footer {
   left: 0;
   width: 100%;
   height: 140px;
-  background: url("../assets/XMasLights.png") repeat-x top center;
+  background: url("../../assets/XMasLights.png") repeat-x top center;
   background-size: 320px auto;
   pointer-events: none;
   z-index: 20;

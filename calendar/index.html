@@ -3,74 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Adventní kalendář 2025</title>
-  <meta name="description" content="Adventní kalendář 2025 by Grafit.games" />
-  <meta property="og:title" content="Adventní kalendář 2025" />
-  <meta property="og:description" content="Adventní kalendář 2025 by Grafit.games" />
-  <meta property="og:url" content="https://grafit.games/calendar/">  
+  <title>Adventní kalendář Grafit.games</title>
+  <meta name="description" content="Adventní kalendář Grafit.games se vrací i letos. Do té doby si zahrajte ten loňský." />
+  <meta property="og:title" content="Adventní kalendář Grafit.games" />
+  <meta property="og:description" content="Adventní kalendář se vrací i letos. Do té doby si zahrajte ten loňský." />
+  <meta property="og:url" content="https://grafit.games/calendar/" />
   <meta property="og:image" content="https://grafit.games/assets/roboti4.png" />
-  <meta property="og:type" content="website">
-  <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:image" content="https://grafit.games/assets/roboti4.png" />
+  <meta property="og:type" content="website" />
   <link rel="icon" type="image/png" href="../assets/Robot.png" />
-  <link rel="stylesheet" href="calendar.css" />
+  <style>
+    :root { --bg: #0b1220; --text: #eaf2ff; --muted: #9fb3d1; --gold: #f7c948; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px 16px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); text-align: center;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #1a2747 0%, rgba(26, 39, 71, 0) 60%),
+        radial-gradient(900px 500px at 110% -20%, #16213e 0%, rgba(22, 33, 62, 0) 60%),
+        var(--bg);
+    }
+    main { max-width: 36rem; }
+    img { width: 96px; height: auto; margin-bottom: 8px; }
+    h1 { margin: 0 0 12px; font-size: clamp(1.8rem, 6vw, 2.6rem); line-height: 1.15; }
+    p { margin: 0 0 12px; color: var(--muted); font-size: 1.1rem; line-height: 1.5; }
+    .btn {
+      display: inline-block; margin-top: 12px; padding: 12px 22px; border-radius: 12px; font-weight: 600;
+      text-decoration: none; color: #1a1f2e; background: linear-gradient(180deg, #ffd36e, var(--gold));
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .back { display: block; margin-top: 28px; color: var(--muted); font-size: 0.95rem; }
+  </style>
 </head>
 <body>
-  <!-- Festive decorations -->
-  <div class="lights" aria-hidden="true"></div>
-  <!-- Lightweight snow overlay; flakes are injected via JS for ambience -->
-  <div class="snow" aria-hidden="true" id="snow"></div>
-
-  <header>
-    <h1>Grafit Advent</h1>
-  </header>
-
-  <!-- Doors grid remains empty until JS renders the randomized order -->
-  <main class="grid" id="grid" aria-live="polite"></main>
-
-  <section class="finale-panel" id="finalePanel" hidden>
-    <p class="finale-panel__lead">
-      Všechny obrázky jsou odemčené! Zadej poslední kód a odkryj závěrečnou zprávu.
-    </p>
-    <div class="input-row finale-panel__input">
-      <input id="finaleInput" type="text" placeholder="Zadej tajný kód" autocomplete="off" />
-      <button class="btn primary" type="button" id="finaleSubmit">Zobrazit</button>
-    </div>
-    <small id="finaleHint" class="finale-hint" hidden aria-live="polite"></small>
-    <div class="finale-message" id="finaleMessage" hidden></div>
-  </section>
-
-  <!-- Modal that shows the selected day and handles the unlock flow -->
-  <dialog id="dayModal" aria-labelledby="modalTitle">
-    <div class="modal-head">
-      <strong id="modalTitle">Datum</strong>
-      <button class="btn" id="closeModal" aria-label="Zavřít">×</button>
-    </div>
-    <div class="modal-body">
-      <div class="game-panel" id="gamePanel"></div>
-      <img id="dayImage" alt="Obrázek okénka" hidden aria-hidden="true" />
-      <div class="input-row">
-        <input id="dayInput" type="text" placeholder="Zadej heslo"/>
-        <button class="btn primary" id="submitNote">Odemknout</button>
-      </div>
-      <small id="unlockHint" style="color:#ff7961;display:none">Nesprávné heslo. Zkus to znovu.</small>
-      <a id="replayGame" class="btn" href="#" target="_blank" rel="noopener" hidden>Spustit hru znovu</a>
-    </div>
-  </dialog>
-
-  <footer>
-    <div class="footer-track" id="footerTrack">
-      <span class="footer-text" id="footerText">
-        Kalendář pro vás připravili Lukáš, Ondra a Honza z <a href="/" class="footer-link">Grafit.games</a>
-      </span>
-      <span class="footer-robot" id="footerRobot" role="img" aria-label="malý robot" tabindex="-1"></span>
-    </div>
-  </footer>
-
-  <script src="calendar.js" defer></script>
-  <script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+  <main>
+    <img src="../assets/Robot.png" alt="malý robot" />
+    <h1>Adventní kalendář se vrací!</h1>
+    <p>I letos pro vás připravujeme adventní kalendář plný her. Startujeme v prosinci, tak nás sledujte.</p>
+    <p>Do té doby si můžete zahrát loňský ročník.</p>
+    <a class="btn" href="2025/">Kalendář 2025 &rarr;</a>
+    <a class="back" href="/">Zpět na Grafit.games</a>
+  </main>
 </body>
 </html>

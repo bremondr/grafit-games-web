@@ -1,0 +1,1316 @@
+// Handles rendering and interactivity for the advent calendar experience.
+
+const ORDER = [7, 22, 1, 14, 9, 18, 3, 24, 6, 13, 2, 17, 10, 5, 20, 11, 4, 16, 8, 21, 12, 19, 15, 23];
+const TOTAL_DAYS = ORDER.length;
+const ENFORCE_SERVER_DATE_LIMIT = false; // Flip to false for testing to keep every day clickable.
+const ENCRYPTED_DIR = "images";
+const FINAL_MESSAGE_URL = "messages/finale.json";
+const STORAGE_KEY = "calendarUnlocked";
+const FINAL_MESSAGE_STORAGE_KEY = "calendarFinalMessage";
+const TIME_API_ENDPOINT = "https://worldtimeapi.org/api/timezone/Europe/Prague";
+
+// Cached DOM lookups
+const grid = document.getElementById("grid");
+const modal = document.getElementById("dayModal");
+const modalTitle = document.getElementById("modalTitle");
+const dayImage = document.getElementById("dayImage");
+const dayInput = document.getElementById("dayInput");
+const submitNote = document.getElementById("submitNote");
+const closeModal = document.getElementById("closeModal");
+const unlockHint = document.getElementById("unlockHint");
+const gamePanel = document.getElementById("gamePanel");
+const replayGameLink = document.getElementById("replayGame");
+const footerTrack = document.getElementById("footerTrack");
+const footerRobot = document.getElementById("footerRobot");
+const footerText = document.getElementById("footerText");
+const lightsElement = document.querySelector(".lights");
+const finalePanel = document.getElementById("finalePanel");
+const finaleInput = document.getElementById("finaleInput");
+const finaleSubmit = document.getElementById("finaleSubmit");
+const finaleHint = document.getElementById("finaleHint");
+const finaleMessage = document.getElementById("finaleMessage");
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const payloadCache = new Map();
+const doorPreviewRefs = new Map();
+const doorPreviewCache = new Map();
+let activeObjectUrl = null;
+let currentDay = null;
+let storedPasswords = loadStoredPasswords();
+let unityInstance = null;
+let unityLoaderScript = null;
+let unityMountedDay = null;
+let dateGateReady = !ENFORCE_SERVER_DATE_LIMIT;
+let maxActiveDay = ENFORCE_SERVER_DATE_LIMIT ? 0 : 24;
+let footerRobotState = null;
+let footerRobotControls = { left: false, right: false, jump: false };
+let footerAnimationFrame = null;
+let calendarComplete = false;
+let finalMessagePayloadPromise = null;
+let storedFinalMessage = loadStoredFinalMessage();
+let attemptedFinalAutoReveal = false;
+let teardownSnowScene = null;
+
+function renderDoors() {
+  grid.innerHTML = "";
+  ORDER.forEach((day) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "door";
+    btn.setAttribute("aria-label", `Den ${day}`);
+    btn.innerHTML = `<img class="door__preview" alt="" aria-hidden="true"><span>${day}</span>`;
+    const previewImg = btn.querySelector(".door__preview");
+    hydrateDoorPreview(day, previewImg, btn);
+    btn.addEventListener("click", () => openDay(day));
+    updateDoorInteractivity(day, btn);
+    grid.appendChild(btn);
+  });
+  updateCompletionState();
+}
+
+function openDay(day) {
+  currentDay = day;
+  modalTitle.textContent = `Den ${day}`;
+  resetModalState();
+  setGameSource(day);
+  modal.showModal();
+  autoUnlockIfStored(day);
+}
+
+function resetModalState() {
+  if (!modal.open) {
+    teardownUnity();
+  }
+  if (activeObjectUrl) {
+    URL.revokeObjectURL(activeObjectUrl);
+    activeObjectUrl = null;
+  }
+  dayImage.removeAttribute("src");
+  dayImage.alt = "";
+  dayImage.hidden = true;
+  dayImage.setAttribute("aria-hidden", "true");
+  dayInput.value = "";
+  unlockHint.style.display = "none";
+  gamePanel.hidden = false;
+  replayGameLink.hidden = true;
+}
+
+function base64ToArrayBuffer(str) {
+  const binary = atob(str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function loadEncryptedPayload(day) {
+  if (!payloadCache.has(day)) {
+    const url = `${ENCRYPTED_DIR}/${day}.json`;
+    const request = fetch(url).then((response) => {
+      if (!response.ok) {
+        throw new Error(`Nepodarilo se nacist sifrovany soubor: ${url}`);
+      }
+      return response.json();
+    });
+    payloadCache.set(day, request);
+  }
+  return payloadCache.get(day);
+}
+
+async function decryptImage(password, day) {
+  if (!window.crypto?.subtle) {
+    throw new Error("Prohlizec nepodporuje Web Crypto API.");
+  }
+  if (!password) {
+    throw new Error("Chybi heslo.");
+  }
+
+  const payload = await loadEncryptedPayload(day);
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: base64ToArrayBuffer(payload.salt),
+      iterations: payload.iterations,
+      hash: "SHA-1",
+    },
+    keyMaterial,
+    { name: "AES-CBC", length: 256 },
+    false,
+    ["decrypt"],
+  );
+
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: "AES-CBC",
+      iv: base64ToArrayBuffer(payload.iv),
+    },
+    key,
+    base64ToArrayBuffer(payload.data),
+  );
+
+  const contentType = payload.contentType || "image/png";
+  return new Blob([decrypted], { type: contentType });
+}
+
+async function showImageForPassword(password, day) {
+  const blob = await decryptImage(password, day);
+  const url = URL.createObjectURL(blob);
+  unlockHint.style.display = "none";
+  if (activeObjectUrl) {
+    URL.revokeObjectURL(activeObjectUrl);
+  }
+  activeObjectUrl = url;
+  dayImage.src = url;
+  dayImage.alt = `Obrazek pro den ${day}`;
+  dayImage.hidden = false;
+  dayImage.removeAttribute("aria-hidden");
+  gamePanel.hidden = true;
+  replayGameLink.hidden = false;
+  setDoorPreview(day, blob);
+}
+
+async function handleUnlock(event) {
+  event.preventDefault();
+  if (currentDay == null) {
+    return;
+  }
+
+  submitNote.disabled = true;
+  const password = dayInput.value.trim();
+
+  try {
+    await showImageForPassword(password, currentDay);
+    rememberPassword(currentDay, password);
+  } catch (error) {
+    console.error("Decrypt failed", error);
+    unlockHint.style.display = "inline";
+    dayInput.focus();
+  } finally {
+    submitNote.disabled = false;
+  }
+}
+
+function registerEvents() {
+  submitNote.addEventListener("click", handleUnlock);
+  ["keydown", "keypress", "keyup"].forEach((type) => {
+    dayInput.addEventListener(
+      type,
+      (event) => {
+        if (type === "keydown" && event.key === "Enter") {
+          handleUnlock(event);
+        }
+        // Stop Unity's global listeners from stealing keyboard events while typing.
+        event.stopPropagation();
+      },
+      true,
+    );
+  });
+  closeModal.addEventListener("click", () => modal.close());
+  modal.addEventListener("close", () => {
+    resetModalState();
+    teardownUnity();
+  });
+  if (finaleSubmit && finaleInput) {
+    const submitFinale = (event) => {
+      if (event) {
+        event.preventDefault();
+      }
+      handleFinaleUnlock();
+    };
+    finaleSubmit.addEventListener("click", submitFinale);
+    finaleInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        submitFinale(event);
+      }
+    });
+  }
+}
+
+function initSnow() {
+  const holder = document.getElementById("snow");
+  if (!holder) {
+    return;
+  }
+  if (typeof teardownSnowScene === "function") {
+    teardownSnowScene();
+    teardownSnowScene = null;
+  }
+  teardownSnowScene = mountSnowScene(holder);
+}
+
+function mountSnowScene(holder) {
+  const canvas = document.createElement("canvas");
+  canvas.className = "snow-canvas";
+  canvas.setAttribute("aria-hidden", "true");
+  holder.innerHTML = "";
+  holder.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  const state = {
+    ctx,
+    canvas,
+    width: 0,
+    height: 0,
+    dpr: Math.min(window.devicePixelRatio || 1, 2),
+    flakes: [],
+    bins: [],
+    binWidth: 4,
+    last: performance.now(),
+    elapsed: 0,
+    raf: null,
+    running: true,
+  };
+
+  const targetFlakes = Math.min(500, 140 + (currentDay || 1) * 8);
+
+  function createFlake(x, y) {
+    return {
+      x,
+      y,
+      r: 0.8 + Math.random() * 2.4,
+      vy: 18 + Math.random() * 26,
+      swayAmp: 10 + Math.random() * 26,
+      swaySpeed: 0.2 + Math.random() * 0.4,
+      phase: Math.random() * Math.PI * 2,
+      angle: Math.random() * Math.PI * 2,
+      spin: -0.35 + Math.random() * 0.7,
+    };
+  }
+
+  function resetFlake(flake) {
+    flake.x = Math.random() * state.width;
+    flake.y = -20 - Math.random() * 40;
+    flake.r = 0.8 + Math.random() * 2.4;
+    flake.vy = 18 + Math.random() * 28;
+    flake.swayAmp = 10 + Math.random() * 28;
+    flake.swaySpeed = 0.2 + Math.random() * 0.45;
+    flake.phase = Math.random() * Math.PI * 2;
+    flake.angle = Math.random() * Math.PI * 2;
+    flake.spin = -0.35 + Math.random() * 0.7;
+  }
+
+  function resize() {
+    state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = window.innerWidth;
+    const cssH = window.innerHeight;
+    canvas.width = Math.floor(cssW * state.dpr);
+    canvas.height = Math.floor(cssH * state.dpr);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(state.dpr, state.dpr);
+    state.width = cssW;
+    state.height = cssH;
+    state.binWidth = Math.max(2, Math.floor(4 * state.dpr)) / state.dpr;
+    const binCount = Math.max(1, Math.ceil(state.width / state.binWidth));
+    state.bins = new Array(binCount).fill(0);
+    if (!state.flakes.length) {
+      for (let i = 0; i < targetFlakes; i++) {
+        state.flakes.push(createFlake(Math.random() * state.width, Math.random() * state.height));
+      }
+    } else {
+      state.flakes.forEach((flake) => {
+        flake.x = Math.random() * state.width;
+        flake.y = Math.random() * state.height;
+      });
+    }
+  }
+
+  function groundHeight(px) {
+    if (!state.bins.length) {
+      return 0;
+    }
+    const idx = Math.max(0, Math.min(state.bins.length - 1, Math.floor(px / state.binWidth)));
+    return state.bins[idx];
+  }
+
+  function addSnow(px, amount) {
+    if (!state.bins.length) {
+      return;
+    }
+    const idx = Math.floor(px / state.binWidth);
+    for (let k = -2; k <= 2; k++) {
+      const j = idx + k;
+      if (j < 0 || j >= state.bins.length) continue;
+      const weight = k === 0 ? 1 : Math.abs(k) === 1 ? 0.65 : 0.35;
+      state.bins[j] = Math.min(state.height * 0.35, state.bins[j] + amount * weight);
+    }
+    const center = Math.max(1, Math.min(state.bins.length - 2, idx));
+    state.bins[center] = (state.bins[center - 1] + state.bins[center] + state.bins[center + 1]) / 3;
+  }
+
+  function drawGround() {
+    if (!state.bins.length) {
+      return;
+    }
+    const maxSnow = state.bins.reduce((m, v) => (v > m ? v : m), 0);
+    if (maxSnow <= 0.5) {
+      return;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, state.height);
+    for (let i = 0; i < state.bins.length; i++) {
+      const x = i * state.binWidth;
+      const y = state.height - state.bins[i];
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(state.width, state.height);
+    ctx.closePath();
+
+    const fadeTop = Math.max(state.height - maxSnow - 20, state.height - 220);
+    const gradient = ctx.createLinearGradient(0, state.height, 0, fadeTop);
+    gradient.addColorStop(0, "rgba(255,255,255,0.95)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function update(dt) {
+    const wind = Math.sin(state.elapsed * 0.12) * 6;
+    for (let i = 0; i < state.flakes.length; i++) {
+      const flake = state.flakes[i];
+      flake.y += flake.vy * dt;
+      flake.x += wind * dt + Math.sin(flake.phase + state.elapsed * flake.swaySpeed) * flake.swayAmp * dt * 0.6;
+      flake.angle += flake.spin * dt;
+
+      if (flake.x < -20) flake.x = state.width + 20;
+      if (flake.x > state.width + 20) flake.x = -20;
+
+      const groundY = state.height - groundHeight(flake.x);
+      if (flake.y + flake.r >= groundY) {
+        addSnow(flake.x, flake.r * 4);
+        resetFlake(flake);
+        continue;
+      }
+      if (flake.y - flake.r > state.height + 40) {
+        resetFlake(flake);
+      }
+    }
+  }
+
+  function drawFlakes() {
+    ctx.save();
+    for (let i = 0; i < state.flakes.length; i++) {
+      drawStylizedFlake(state.flakes[i]);
+    }
+    ctx.restore();
+  }
+
+  function drawArmSegments(context, length) {
+    const branch1 = -length * 0.58;
+    const branch2 = -length * 0.82;
+    context.moveTo(0, 0);
+    context.lineTo(0, -length);
+    context.moveTo(0, branch1);
+    context.lineTo(length * 0.28, branch1 + length * 0.22);
+    context.moveTo(0, branch1);
+    context.lineTo(-length * 0.28, branch1 + length * 0.22);
+    context.moveTo(0, branch2);
+    context.lineTo(length * 0.22, branch2 + length * 0.18);
+    context.moveTo(0, branch2);
+    context.lineTo(-length * 0.22, branch2 + length * 0.18);
+  }
+
+  function drawHexPath(context, radius) {
+    for (let i = 0; i <= 6; i++) {
+      const ang = Math.PI / 6 + (i * Math.PI) / 3;
+      const x = Math.cos(ang) * radius;
+      const y = Math.sin(ang) * radius;
+      if (i === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    }
+  }
+
+  function drawStylizedFlake(flake) {
+    const size = 6 + flake.r * 4.5;
+    const alpha = Math.min(0.95, 0.35 + flake.r * 0.2);
+    ctx.save();
+    ctx.translate(flake.x, flake.y);
+    ctx.rotate(flake.angle);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+
+    ctx.lineWidth = Math.max(0.6, size * 0.12);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      ctx.save();
+      ctx.rotate((Math.PI * 2 * i) / 6);
+      drawArmSegments(ctx, size);
+      ctx.restore();
+    }
+    ctx.stroke();
+
+    const inner = size * 0.55;
+    ctx.lineWidth = Math.max(0.5, size * 0.08);
+    ctx.beginPath();
+    drawHexPath(ctx, inner);
+    ctx.stroke();
+
+    const diagX = Math.cos(Math.PI / 6) * inner;
+    const diagY = Math.sin(Math.PI / 6) * inner;
+    ctx.beginPath();
+    ctx.moveTo(0, -inner);
+    ctx.lineTo(0, inner);
+    ctx.moveTo(-diagX, -diagY);
+    ctx.lineTo(diagX, diagY);
+    ctx.moveTo(-diagX, diagY);
+    ctx.lineTo(diagX, -diagY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function loop(now) {
+    if (!state.running) {
+      return;
+    }
+    const dt = Math.min(0.05, (now - state.last) / 1000);
+    state.last = now;
+    state.elapsed += dt;
+    ctx.clearRect(0, 0, state.width, state.height);
+    update(dt);
+    drawFlakes();
+    drawGround();
+    state.raf = requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  loop(performance.now());
+
+  return () => {
+    state.running = false;
+    if (state.raf) {
+      cancelAnimationFrame(state.raf);
+    }
+    window.removeEventListener("resize", resize);
+  };
+}
+
+renderDoors();
+updateCompletionState();
+registerEvents();
+initSnow();
+bootstrapUnlockedPreviews();
+initDateGate();
+initFooterRobotEasterEgg();
+
+function loadStoredPasswords() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistPasswords() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedPasswords));
+  } catch {
+    // Ignore storage failures (e.g., disabled cookies)
+  }
+}
+
+function rememberPassword(day, password) {
+  if (!password) {
+    return;
+  }
+  storedPasswords[day] = password;
+  persistPasswords();
+  updateCompletionState();
+}
+
+function forgetPassword(day) {
+  if (storedPasswords[day]) {
+    delete storedPasswords[day];
+    persistPasswords();
+    clearDoorPreview(day);
+    updateCompletionState();
+  }
+}
+
+async function autoUnlockIfStored(day) {
+  const cached = storedPasswords[day];
+  if (!cached) {
+    return;
+  }
+  submitNote.disabled = true;
+  try {
+    dayInput.value = cached;
+    await showImageForPassword(cached, day);
+  } catch (error) {
+    console.warn("Cached password invalid, clearing entry.", error);
+    forgetPassword(day);
+  } finally {
+    submitNote.disabled = false;
+  }
+}
+
+function setGameSource(day) {
+  const url = `games/${day}/index.html`;
+  replayGameLink.href = url;
+  mountUnityGame(day);
+}
+
+function mountUnityGame(day) {
+  teardownUnity();
+  unityMountedDay = day;
+  gamePanel.innerHTML = `
+    <div class="unity-shell">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+      <div id="unity-loading-bar" class="unity-loading">
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning" class="unity-warning"></div>
+    </div>
+  `;
+
+  const canvas = gamePanel.querySelector("#unity-canvas");
+  const loadingBar = gamePanel.querySelector("#unity-loading-bar");
+  const progressBarFull = gamePanel.querySelector("#unity-progress-bar-full");
+  const warningBanner = gamePanel.querySelector("#unity-warning");
+
+  const unityShowBanner = (msg, type) => {
+    warningBanner.textContent = msg || "";
+    warningBanner.classList.toggle("error", type === "error");
+    warningBanner.classList.toggle("warning", type === "warning");
+    warningBanner.style.display = msg ? "block" : "none";
+    if (msg && type !== "error") {
+      setTimeout(() => {
+        warningBanner.textContent = "";
+        warningBanner.style.display = "none";
+      }, 5000);
+    }
+  };
+
+  const buildName = `Day_${day}`;
+  const baseUrl = `games/${day}`;
+  const buildUrl = `${baseUrl}/Build`;
+  const loaderUrl = `${buildUrl}/${buildName}.loader.js`;
+  const config = {
+    arguments: [],
+    dataUrl: `${buildUrl}/${buildName}.data.unityweb`,
+    frameworkUrl: `${buildUrl}/${buildName}.framework.js.unityweb`,
+    codeUrl: `${buildUrl}/${buildName}.wasm.unityweb`,
+    streamingAssetsUrl: `${baseUrl}/StreamingAssets`,
+    companyName: "DefaultCompany",
+    productName: "Project Radiance",
+    productVersion: "1.0",
+    showBanner: unityShowBanner,
+    matchWebGLToCanvasSize: true,
+  };
+
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  loadingBar.style.display = "block";
+
+  const script = document.createElement("script");
+  unityLoaderScript = script;
+  script.src = loaderUrl;
+  script.onload = () => {
+    createUnityInstance(canvas, config, (progress) => {
+      progressBarFull.style.width = 100 * progress + "%";
+    })
+      .then((instance) => {
+        unityInstance = instance;
+        loadingBar.style.display = "none";
+      })
+      .catch((message) => {
+        alert(message);
+      });
+  };
+  script.onerror = () => {
+    unityShowBanner("Nepodarilo se nacist hru.", "error");
+    loadingBar.style.display = "none";
+  };
+  document.body.appendChild(script);
+}
+
+function teardownUnity() {
+  unityMountedDay = null;
+  if (unityInstance?.Quit) {
+    unityInstance.Quit().catch(() => {});
+  }
+  unityInstance = null;
+  if (unityLoaderScript?.parentNode) {
+    unityLoaderScript.parentNode.removeChild(unityLoaderScript);
+  }
+  unityLoaderScript = null;
+  gamePanel.innerHTML = "";
+}
+
+function updateDoorInteractivity(day, button) {
+  const isUnlocked = isDayUnlocked(day);
+  button.disabled = !isUnlocked;
+  button.classList.toggle("door--locked", !isUnlocked);
+}
+
+function applyDoorLockState() {
+  doorPreviewRefs.forEach(({ button }, day) => {
+    if (button) {
+      updateDoorInteractivity(day, button);
+    }
+  });
+}
+
+function isDayUnlocked(day) {
+  if (!ENFORCE_SERVER_DATE_LIMIT) {
+    return true;
+  }
+  if (!dateGateReady) {
+    return false;
+  }
+  return day <= maxActiveDay;
+}
+
+async function initDateGate() {
+  if (!ENFORCE_SERVER_DATE_LIMIT) {
+    return;
+  }
+  try {
+    const serverCalendarInfo = await fetchServerCalendarInfo();
+    maxActiveDay = deriveMaxActiveDay(serverCalendarInfo);
+  } catch (error) {
+    console.warn("Server date lookup failed, falling back to client clock.", error);
+    maxActiveDay = deriveMaxActiveDay(createCalendarInfoFromDate(new Date()));
+  } finally {
+    dateGateReady = true;
+    applyDoorLockState();
+  }
+}
+
+async function fetchServerCalendarInfo() {
+  const response = await fetch(TIME_API_ENDPOINT, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Time endpoint responded with ${response.status}`);
+  }
+  const payload = await response.json();
+  if (typeof payload.datetime !== "string" || payload.datetime.length < 10) {
+    throw new Error("Time endpoint response missing datetime.");
+  }
+
+  const isoDate = payload.datetime;
+  const month = Number(isoDate.slice(5, 7));
+  const day = Number(isoDate.slice(8, 10));
+  if (Number.isNaN(month) || Number.isNaN(day)) {
+    throw new Error("Unable to parse datetime from server.");
+  }
+  return { month, day };
+}
+
+function deriveMaxActiveDay(calendarInfo) {
+  if (!calendarInfo) {
+    return 24;
+  }
+  const monthIndex = Number(calendarInfo.month) - 1;
+  const day = Number(calendarInfo.day);
+  if (Number.isNaN(monthIndex) || Number.isNaN(day)) {
+    return 24;
+  }
+  if (monthIndex < 11) {
+    return 0;
+  }
+  if (monthIndex > 11) {
+    return 24;
+  }
+  return Math.max(0, Math.min(day, 24));
+}
+
+function createCalendarInfoFromDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return { month: 1, day: 0 };
+  }
+  return {
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+  };
+}
+
+function hydrateDoorPreview(day, imgEl, button) {
+  doorPreviewRefs.set(day, { imgEl, button });
+  const cachedUrl = doorPreviewCache.get(day.toString());
+  if (cachedUrl) {
+    imgEl.src = cachedUrl;
+    button.classList.add("has-preview");
+  }
+}
+
+function setDoorPreview(day, blob) {
+  const key = day.toString();
+  const existing = doorPreviewCache.get(key);
+  if (existing) {
+    URL.revokeObjectURL(existing);
+  }
+  const previewUrl = URL.createObjectURL(blob);
+  doorPreviewCache.set(key, previewUrl);
+  const refs = doorPreviewRefs.get(day);
+  if (refs) {
+    refs.imgEl.src = previewUrl;
+    refs.button.classList.add("has-preview");
+  }
+  updateCompletionState();
+}
+
+function clearDoorPreview(day) {
+  const key = day.toString();
+  const cached = doorPreviewCache.get(key);
+  if (cached) {
+    URL.revokeObjectURL(cached);
+    doorPreviewCache.delete(key);
+  }
+  const refs = doorPreviewRefs.get(day);
+  if (refs) {
+    refs.imgEl.removeAttribute("src");
+    refs.button.classList.remove("has-preview");
+  }
+  updateCompletionState();
+}
+
+function hasDoorPreview(day) {
+  return doorPreviewCache.has(day.toString());
+}
+
+function hasAllStoredPasswords() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return false;
+    }
+    const snapshot = JSON.parse(raw);
+    return ORDER.every((day) => Boolean(snapshot?.[day]));
+  } catch {
+    return false;
+  }
+}
+
+function updateCompletionState() {
+  if (!grid) {
+    toggleFinalePanel(false);
+    return;
+  }
+  const previewsComplete = doorPreviewCache.size >= TOTAL_DAYS && ORDER.every(hasDoorPreview);
+  const passwordsComplete = hasAllStoredPasswords();
+  const complete = previewsComplete && passwordsComplete;
+  grid.classList.toggle("grid--complete", complete);
+  calendarComplete = complete;
+  toggleFinalePanel(complete);
+}
+
+async function bootstrapUnlockedPreviews() {
+  const entries = Object.entries(storedPasswords);
+  for (const [dayStr, password] of entries) {
+    const dayNum = Number(dayStr);
+    if (!password || Number.isNaN(dayNum)) {
+      continue;
+    }
+    try {
+      const blob = await decryptImage(password, dayNum);
+      setDoorPreview(dayNum, blob);
+    } catch (error) {
+      console.warn(`Failed to restore preview for day ${dayNum}`, error);
+      forgetPassword(dayNum);
+    }
+  }
+}
+
+function loadFinalMessagePayload() {
+  if (!finalMessagePayloadPromise) {
+    finalMessagePayloadPromise = fetch(FINAL_MESSAGE_URL, { cache: "no-store" }).then((response) => {
+      if (!response.ok) {
+        throw new Error(`Nepodarilo se nacist tajnou zpravu: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+  return finalMessagePayloadPromise;
+}
+
+async function decryptFinalMessage(password) {
+  if (!window.crypto?.subtle) {
+    throw new Error("Prohlizec nepodporuje Web Crypto API.");
+  }
+  if (!password) {
+    throw new Error("Chybi heslo.");
+  }
+  const payload = await loadFinalMessagePayload();
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: base64ToArrayBuffer(payload.salt),
+      iterations: payload.iterations,
+      hash: "SHA-1",
+    },
+    keyMaterial,
+    { name: "AES-CBC", length: 256 },
+    false,
+    ["decrypt"],
+  );
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: "AES-CBC",
+      iv: base64ToArrayBuffer(payload.iv),
+    },
+    key,
+    base64ToArrayBuffer(payload.data),
+  );
+  return decoder.decode(new Uint8Array(decrypted));
+}
+
+async function handleFinaleUnlock() {
+  if (!calendarComplete || !finaleInput || !finaleSubmit) {
+    return;
+  }
+  const password = finaleInput.value.trim();
+  if (!password) {
+    finaleInput.focus();
+    return;
+  }
+  setFinaleHintMessage("");
+  setFinaleLoading(true);
+  try {
+    const message = await decryptFinalMessage(password);
+    showFinalMessage(message);
+    rememberFinalMessage(password, message);
+  } catch (error) {
+    console.error("Final message decrypt failed", error);
+    setFinaleHintMessage("Nesprávný kód. Zkus to znovu.");
+    finaleInput.focus();
+  } finally {
+    setFinaleLoading(false);
+  }
+}
+
+function showFinalMessage(text) {
+  if (!finaleMessage || !finalePanel) {
+    return;
+  }
+  finaleMessage.innerHTML = text;
+  finaleMessage.hidden = false;
+  finalePanel.classList.add("finale-panel--unlocked");
+  setFinaleHintMessage("");
+}
+
+function setFinaleLoading(isLoading) {
+  if (finaleSubmit) {
+    finaleSubmit.disabled = isLoading;
+  }
+  if (finaleInput) {
+    finaleInput.disabled = isLoading;
+  }
+}
+
+function setFinaleHintMessage(text) {
+  if (!finaleHint) {
+    return;
+  }
+  if (!text) {
+    finaleHint.textContent = "";
+    finaleHint.hidden = true;
+    return;
+  }
+  finaleHint.textContent = text;
+  finaleHint.hidden = false;
+}
+
+function toggleFinalePanel(show) {
+  if (!finalePanel) {
+    return;
+  }
+  finalePanel.hidden = !show;
+  finalePanel.style.display = show ? "flex" : "none";
+  if (show && !attemptedFinalAutoReveal) {
+    attemptedFinalAutoReveal = true;
+    autoRevealFinalMessage();
+  } else if (!show) {
+    attemptedFinalAutoReveal = false;
+    setFinaleHintMessage("");
+    if (finaleInput) {
+      finaleInput.value = "";
+      finaleInput.disabled = false;
+    }
+    if (finaleMessage) {
+      finaleMessage.hidden = true;
+      finaleMessage.textContent = "";
+    }
+    finalePanel.classList.remove("finale-panel--unlocked");
+  }
+}
+
+async function autoRevealFinalMessage() {
+  if (!storedFinalMessage) {
+    return;
+  }
+  if (storedFinalMessage.text) {
+    showFinalMessage(storedFinalMessage.text);
+  }
+  if (!storedFinalMessage.password) {
+    return;
+  }
+  try {
+    setFinaleLoading(true);
+    const message = await decryptFinalMessage(storedFinalMessage.password);
+    showFinalMessage(message);
+    rememberFinalMessage(storedFinalMessage.password, message);
+    if (finaleInput) {
+      finaleInput.value = storedFinalMessage.password;
+    }
+  } catch (error) {
+    console.warn("Stored finale password invalid, clearing entry.", error);
+    forgetFinalMessage();
+    if (finaleInput) {
+      finaleInput.value = "";
+    }
+  } finally {
+    setFinaleLoading(false);
+  }
+}
+
+function rememberFinalMessage(password, message) {
+  storedFinalMessage = { password, text: message };
+  persistFinalMessage();
+}
+
+function persistFinalMessage() {
+  try {
+    if (storedFinalMessage) {
+      localStorage.setItem(FINAL_MESSAGE_STORAGE_KEY, JSON.stringify(storedFinalMessage));
+    } else {
+      localStorage.removeItem(FINAL_MESSAGE_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function loadStoredFinalMessage() {
+  try {
+    const raw = localStorage.getItem(FINAL_MESSAGE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function forgetFinalMessage() {
+  storedFinalMessage = null;
+  persistFinalMessage();
+  if (finaleMessage) {
+    finaleMessage.hidden = true;
+    finaleMessage.textContent = "";
+  }
+  if (finalePanel) {
+    finalePanel.classList.remove("finale-panel--unlocked");
+  }
+}
+
+function initFooterRobotEasterEgg() {
+  if (!footerTrack || !footerRobot || !footerText) {
+    return;
+  }
+  footerRobotState = createFooterRobotState();
+  applyFooterRobotTransforms();
+  window.addEventListener("keydown", handleFooterRobotKeyDown);
+  window.addEventListener("keyup", handleFooterRobotKeyUp);
+  window.addEventListener("resize", () => {
+    if (!footerRobotState) {
+      return;
+    }
+    recalcFooterRobotStage();
+  });
+  footerAnimationFrame = requestAnimationFrame(stepFooterRobot);
+}
+
+function createFooterRobotState() {
+  const margin = 0;
+  const trackWidth = getFooterTrackWidth();
+  const robotWidth = footerRobot.offsetWidth || 36;
+  const robotHeight = footerRobot.offsetHeight || 36;
+  const textWidth = footerText.offsetWidth || 150;
+  const usableWidth = trackWidth;
+  const textStart = clampValue((usableWidth - textWidth) / 2, 0, Math.max(usableWidth - textWidth, 0));
+  const startOnLeft = Math.random() < 0.5;
+  const startX = startOnLeft ? 0 : Math.max(usableWidth - robotWidth, 0);
+  return {
+    margin,
+    trackWidth,
+    usableWidth,
+    robotWidth,
+    robotHeight,
+    textWidth,
+    robotX: startX,
+    robotY: 0,
+    robotVX: 0,
+    robotVY: 0,
+    textX: textStart,
+    textVX: 0,
+    grounded: true,
+    currentPlatform: null,
+    lastTextEdge: null,
+    facing: startOnLeft ? "right" : "left",
+  };
+}
+
+function handleFooterRobotKeyDown(event) {
+  if (!footerRobotState || isTypingTarget(event.target)) {
+    return;
+  }
+  if (event.code === "ArrowLeft" || event.code === "ArrowRight" || event.code === "Space") {
+    event.preventDefault();
+  }
+  if (event.code === "ArrowLeft") {
+    footerRobotControls.left = true;
+  }
+  if (event.code === "ArrowRight") {
+    footerRobotControls.right = true;
+  }
+  if (event.code === "Space") {
+    footerRobotControls.jump = true;
+  }
+}
+
+function handleFooterRobotKeyUp(event) {
+  if (!footerRobotState) {
+    return;
+  }
+  if (event.code === "ArrowLeft") {
+    footerRobotControls.left = false;
+  }
+  if (event.code === "ArrowRight") {
+    footerRobotControls.right = false;
+  }
+  if (event.code === "Space") {
+    footerRobotControls.jump = false;
+  }
+}
+
+function stepFooterRobot() {
+  if (!footerRobotState) {
+    return;
+  }
+  updateFooterRobotPhysics();
+  applyFooterRobotTransforms();
+  footerAnimationFrame = requestAnimationFrame(stepFooterRobot);
+}
+
+function updateFooterRobotPhysics() {
+  const state = footerRobotState;
+  const controls = footerRobotControls;
+  const ACCEL = 0.28;
+  const FRICTION = 0.86;
+  const MAX_SPEED = 3.4;
+  const GRAVITY = -0.3;
+  const JUMP_FORCE = 5.5;
+  const TEXT_PLATFORM_MARGIN = 5;
+
+  if (controls.left) {
+    state.robotVX = Math.max(state.robotVX - ACCEL, -MAX_SPEED);
+  }
+  if (controls.right) {
+    state.robotVX = Math.min(state.robotVX + ACCEL, MAX_SPEED);
+  }
+  if (!controls.left && !controls.right) {
+    state.robotVX *= FRICTION;
+    if (Math.abs(state.robotVX) < 0.01) {
+      state.robotVX = 0;
+    }
+  }
+
+  if (controls.jump && state.grounded) {
+    state.robotVY = JUMP_FORCE;
+    state.grounded = false;
+  }
+  if (!state.grounded) {
+    state.robotVY += GRAVITY;
+  }
+  state.robotY += state.robotVY;
+  let groundedNow = false;
+  const platform = getFooterPlatformCollision(state, TEXT_PLATFORM_MARGIN);
+  if (platform?.landed) {
+    state.robotY = platform.height;
+    if (state.robotVY < 0) {
+      state.robotVY = 0;
+    }
+    groundedNow = true;
+    state.currentPlatform = platform.id;
+  } else if (state.robotY <= 0) {
+    state.robotY = 0;
+    if (state.robotVY < 0) {
+      state.robotVY = 0;
+    }
+    groundedNow = true;
+    state.currentPlatform = null;
+  } else {
+    state.currentPlatform = null;
+  }
+  state.grounded = groundedNow;
+
+  state.robotX += state.robotVX;
+  const maxRobotX = Math.max(state.usableWidth - state.robotWidth, 0);
+  if (state.robotX < 0) {
+    state.robotX = 0;
+    state.robotVX = 0;
+  } else if (state.robotX > maxRobotX) {
+    state.robotX = maxRobotX;
+    state.robotVX = 0;
+  }
+  if (state.robotVX > 0.1) {
+    state.facing = "right";
+  } else if (state.robotVX < -0.1) {
+    state.facing = "left";
+  }
+
+  state.textWidth = footerText.offsetWidth || state.textWidth;
+  state.textVX *= 0.9;
+  handleFooterTextCollision(state, controls);
+  state.textX += state.textVX;
+  const maxTextX = Math.max(state.usableWidth - state.textWidth, 0);
+  if (state.textX < 0) {
+    state.textX = 0;
+    state.textVX = 0;
+  } else if (state.textX > maxTextX) {
+    state.textX = maxTextX;
+    state.textVX = 0;
+  }
+  let currentEdge = null;
+  if (state.textX <= 0) {
+    currentEdge = "left";
+  } else if (state.textX >= maxTextX) {
+    currentEdge = "right";
+  }
+  if (currentEdge && currentEdge !== state.lastTextEdge) {
+    triggerLights();
+  }
+  state.lastTextEdge = currentEdge;
+}
+
+function handleFooterTextCollision(state, controls) {
+  const textMin = state.textX;
+  const textMax = state.textX + state.textWidth;
+  const robotMin = state.robotX;
+  const robotMax = state.robotX + state.robotWidth;
+  const verticalOverlap = state.robotY < state.robotHeight * 0.25;
+  const horizontalContact = robotMax > textMin && robotMin < textMax;
+  if (!horizontalContact || !verticalOverlap || state.currentPlatform === "text") {
+    return;
+  }
+  const direction = resolveFooterDirection(state, controls);
+  if (!direction) {
+    return;
+  }
+  const overlap = direction > 0 ? robotMax - textMin : textMax - robotMin;
+  state.textVX += direction * Math.min(Math.max(Math.abs(state.robotVX) * 0.4, 0.18), 1);
+  if (direction > 0) {
+    state.robotX -= overlap;
+  } else {
+    state.robotX += overlap;
+  }
+}
+
+function resolveFooterDirection(state, controls) {
+  if (state.robotVX > 0.05) {
+    return 1;
+  }
+  if (state.robotVX < -0.05) {
+    return -1;
+  }
+  if (controls.right && !controls.left) {
+    return 1;
+  }
+  if (controls.left && !controls.right) {
+    return -1;
+  }
+  return 0;
+}
+
+function applyFooterRobotTransforms() {
+  if (!footerRobotState) {
+    return;
+  }
+  const state = footerRobotState;
+  footerRobot.style.left = `${state.robotX}px`;
+  footerRobot.style.transform = `translate3d(0, ${-state.robotY}px, 0)`;
+  footerRobot.classList.toggle("robot-left", state.facing === "left");
+  footerText.style.left = `${state.textX}px`;
+}
+
+function recalcFooterRobotStage() {
+  if (!footerRobotState) {
+    return;
+  }
+  const state = footerRobotState;
+  const previousUsable = state.usableWidth || 1;
+  state.trackWidth = getFooterTrackWidth();
+  state.usableWidth = state.trackWidth;
+  const scale = previousUsable > 0 ? state.usableWidth / previousUsable : 1;
+  state.robotWidth = footerRobot.offsetWidth || state.robotWidth;
+  state.robotHeight = footerRobot.offsetHeight || state.robotHeight;
+  state.textWidth = footerText.offsetWidth || state.textWidth;
+  state.robotX = clampValue(state.robotX * scale, 0, Math.max(state.usableWidth - state.robotWidth, 0));
+  state.textX = clampValue(state.textX * scale, 0, Math.max(state.usableWidth - state.textWidth, 0));
+}
+
+function isTypingTarget(element) {
+  if (!element) {
+    return false;
+  }
+  const tag = element.tagName?.toLowerCase();
+  return tag === "input" || tag === "textarea" || element.isContentEditable;
+}
+
+function clampValue(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getFooterTrackWidth() {
+  return footerTrack?.offsetWidth || Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+}
+
+function getFooterPlatformCollision(state, margin) {
+  const platformHeight = state.robotHeight * 0.5;
+  const textMin = state.textX - margin;
+  const textMax = state.textX + state.textWidth + margin;
+  const robotMin = state.robotX;
+  const robotMax = state.robotX + state.robotWidth;
+  const robotCenter = robotMin + state.robotWidth / 2;
+  const horizontalOverlap = robotCenter > textMin && robotCenter < textMax;
+  const descending = state.robotVY <= 0;
+  const nearPlatform = Math.abs(state.robotY - platformHeight) <= state.robotHeight * 0.35;
+  if (!horizontalOverlap || !descending || !nearPlatform) {
+    return null;
+  }
+  return {
+    id: "text",
+    landed: true,
+    height: platformHeight,
+  };
+}
+
+function triggerLights() {
+  if (!lightsElement) {
+    return;
+  }
+  lightsElement.classList.add("lights-on");
+}
