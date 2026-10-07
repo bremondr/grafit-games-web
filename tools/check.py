@@ -63,6 +63,20 @@ def check_years():
             problems.append(f"calendar/{year.name}: missing messages/finale.json")
 
 
+def check_themes():
+    for themes_js in sorted((ROOT / "calendar").glob("*/themes.js")):
+        year = themes_js.parent
+        text = themes_js.read_text(encoding="utf-8")
+        found = re.findall(r'id:\s*"([^"]+)"\s*,\s*name:[^,]+,\s*startDay:\s*(\d+)', text)
+        ids, starts = [i for i, _ in found], [int(d) for _, d in found]
+        if not found or starts[0] != 1 or starts != sorted(set(starts)) or starts[-1] > 24:
+            problems.append(f"{themes_js.relative_to(ROOT)}: themes must start at day 1 with ascending startDay <= 24")
+        css = (year / "calendar.css").read_text(encoding="utf-8")
+        for theme_id in ids:
+            if f'[data-theme="{theme_id}"]' not in css:
+                problems.append(f"{year.name}/calendar.css: no palette block for {theme_id}")
+
+
 def check_private():
     out = subprocess.run(["git", "ls-files", "--cached", "calendar"], cwd=ROOT,
                          capture_output=True, text=True).stdout.splitlines()
@@ -73,6 +87,7 @@ def check_private():
 
 n = check_refs()
 check_years()
+check_themes()
 check_private()
 print(f"checked {n} html/css files")
 if problems:

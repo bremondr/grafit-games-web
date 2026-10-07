@@ -1,10 +1,64 @@
-﻿:root {
-  /* Shared color palette for winter/night feel */
+﻿/* Themes: one block per week (see themes.js for the ids and the day each starts on).
+   Everything theme-specific is a variable here, so a theme is just a palette
+   (and optionally extra rules scoped with [data-theme="..."]). The values below
+   are placeholders until the real themes are decided. */
+:root,
+:root[data-theme="theme-1"] {
   --bg: #0b1220;
+  --glow-1: #1a2747;
+  --glow-2: #16213e;
+  --panel: #0f1730;
+  --door-from: #172446;
+  --door-to: #0e1834;
   --text: #eaf2ff;
   --muted: #9fb3d1;
-  --gold: #f7c948;
+  --accent: #f7c948;
+  --accent-light: #ffd36e;
+  --accent-rgb: 247, 201, 72;
 }
+
+:root[data-theme="theme-2"] {
+  --bg: #0a1812;
+  --glow-1: #17402c;
+  --glow-2: #12301f;
+  --panel: #0e2318;
+  --door-from: #15402b;
+  --door-to: #0c2417;
+  --text: #ecfff3;
+  --muted: #9fd1b3;
+  --accent: #6fe39a;
+  --accent-light: #a6f2c2;
+  --accent-rgb: 111, 227, 154;
+}
+
+:root[data-theme="theme-3"] {
+  --bg: #150b20;
+  --glow-1: #3a1a57;
+  --glow-2: #2a1647;
+  --panel: #1d1030;
+  --door-from: #3a1d5c;
+  --door-to: #22103a;
+  --text: #f6ecff;
+  --muted: #c29fd1;
+  --accent: #e07bff;
+  --accent-light: #efa8ff;
+  --accent-rgb: 224, 123, 255;
+}
+
+:root[data-theme="theme-4"] {
+  --bg: #200b0e;
+  --glow-1: #57201a;
+  --glow-2: #471620;
+  --panel: #301014;
+  --door-from: #5c1d24;
+  --door-to: #3a1016;
+  --text: #fff0ec;
+  --muted: #d1a39f;
+  --accent: #ff8a5c;
+  --accent-light: #ffb08f;
+  --accent-rgb: 255, 138, 92;
+}
+
 
 * {
   box-sizing: border-box;
@@ -22,8 +76,8 @@ body {
     "Segoe UI Symbol";
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 10% -10%, #1a2747 0%, rgba(26, 39, 71, 0) 60%),
-    radial-gradient(900px 500px at 110% -20%, #16213e 0%, rgba(22, 33, 62, 0) 60%),
+    radial-gradient(1200px 600px at 10% -10%, var(--glow-1) 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% -20%, var(--glow-2) 0%, transparent 60%),
     var(--bg);
   min-height: 100%;
   display: flex;
@@ -40,7 +94,7 @@ h1 {
   margin: 0 0 8px;
   font-size: clamp(28px, 4.5vw, 48px);
   letter-spacing: 0.5px;
-  color: gold;
+  color: var(--accent);
 }
 
 .subtitle {
@@ -91,8 +145,8 @@ h1 {
 
 .finale-message {
   border-radius: 16px;
-  border: 1px solid rgba(247, 201, 72, 0.4);
-  background: rgba(247, 201, 72, 0.05);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.05);
   padding: 18px;
   font-size: clamp(16px, 2vw, 20px);
   line-height: 1.6;
@@ -101,20 +155,20 @@ h1 {
 }
 
 .finale-message-link {
-  color: var(--gold);
+  color: var(--accent);
   text-decoration: none;
   font-weight: 600;
 }
 
 .finale-highlight {
-  color: #f7c948;
+  color: var(--accent);
   text-decoration: none;
   font-weight: 600;
 }
 
 .finale-panel--unlocked {
-  border-color: rgba(247, 201, 72, 0.6);
-  box-shadow: 0 0 35px rgba(247, 201, 72, 0.25);
+  border-color: rgba(var(--accent-rgb), 0.6);
+  box-shadow: 0 0 35px rgba(var(--accent-rgb), 0.25);
 }
 
 .grid.grid--complete {
@@ -126,7 +180,7 @@ h1 {
 .door {
   position: relative;
   aspect-ratio: 1 / 1;
-  background: linear-gradient(180deg, #172446, #0e1834);
+  background: linear-gradient(180deg, var(--door-from), var(--door-to));
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
   overflow: hidden;
@@ -141,7 +195,7 @@ h1 {
   justify-content: center;
   font-weight: 800;
   font-size: clamp(20px, 2vw, 30px);
-  color: var(--gold);
+  color: var(--accent);
   text-shadow: 0 1px 0 #7a5c00;
 }
 .door__preview {
@@ -210,7 +264,7 @@ dialog {
   padding: 0;
   width: min(1280px, 96vw);
   max-height: 94vh;
-  background: #0f1730;
+  background: var(--panel);
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -301,7 +355,7 @@ dialog::backdrop {
 #unity-progress-bar-full {
   width: 0%;
   height: 100%;
-  background: linear-gradient(180deg, #ffd36e, #f7c948);
+  background: linear-gradient(180deg, var(--accent-light), var(--accent));
   transition: width 0.2s ease;
 }
 
@@ -325,7 +379,7 @@ dialog::backdrop {
 }
 
 .unity-warning.warning {
-  border-color: #ffd36e;
+  border-color: var(--accent-light);
   color: #fff3d1;
 }
 
@@ -365,7 +419,7 @@ dialog::backdrop {
 }
 
 .btn.primary {
-  background: linear-gradient(180deg, #ffd36e, #f7c948);
+  background: linear-gradient(180deg, var(--accent-light), var(--accent));
   color: #1a1f2e;
   border-color: rgba(0, 0, 0, 0.12);
   font-weight: 600;
@@ -416,7 +470,7 @@ footer {
 }
 
 .footer-link {
-  color: var(--gold);
+  color: var(--accent);
   text-decoration: none;
   font-weight: 600;
 }

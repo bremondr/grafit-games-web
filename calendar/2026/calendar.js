@@ -58,6 +58,7 @@ function renderDoors() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "door";
+    btn.dataset.theme = themeForDay(day).id;
     btn.setAttribute("aria-label", `Den ${day}`);
     btn.innerHTML = `<img class="door__preview" alt="" aria-hidden="true"><span>${day}</span>`;
     const previewImg = btn.querySelector(".door__preview");
@@ -504,6 +505,7 @@ function mountSnowScene(holder) {
   };
 }
 
+applyPageTheme(resolvePageTheme());
 renderDoors();
 updateCompletionState();
 registerEvents();
@@ -685,6 +687,20 @@ function isDayUnlocked(day) {
   return day <= maxActiveDay;
 }
 
+// Page theme follows the calendar date (client clock until the server date arrives).
+function resolvePageTheme() {
+  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const override = readThemeOverride(!ENFORCE_SERVER_DATE_LIMIT || isLocal);
+  if (override) {
+    return override;
+  }
+  const day =
+    ENFORCE_SERVER_DATE_LIMIT && dateGateReady
+      ? maxActiveDay
+      : deriveMaxActiveDay(createCalendarInfoFromDate(new Date()));
+  return themeForDay(day);
+}
+
 async function initDateGate() {
   if (!ENFORCE_SERVER_DATE_LIMIT) {
     return;
@@ -697,6 +713,7 @@ async function initDateGate() {
     maxActiveDay = deriveMaxActiveDay(createCalendarInfoFromDate(new Date()));
   } finally {
     dateGateReady = true;
+    applyPageTheme(resolvePageTheme());
     applyDoorLockState();
   }
 }
